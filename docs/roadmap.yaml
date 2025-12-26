@@ -1,0 +1,137 @@
+schemaVersion: 1
+objectTypes:
+  package:
+    backup:
+      status: implemented
+      payload: metadata-xml
+    restore:
+      status: implemented
+  domain:
+    backup:
+      status: implemented
+      payload: metadata-xml
+    restore:
+      status: implemented
+  dataElement:
+    backup:
+      status: implemented
+      payload: metadata-xml
+    restore:
+      status: implemented
+  structure:
+    backup:
+      status: implemented
+      payload: source
+    restore:
+      status: implemented
+  table:
+    backup:
+      status: implemented
+      payload: source
+    restore:
+      status: implemented
+  tableType:
+    backup:
+      status: implemented
+      payload: source
+    restore:
+      status: not-implemented
+      plan:
+        - "Parse table type metadata to capture row_type_name and type_name."
+        - "Restore via AdtClient.getTableType().update() using XML-based config."
+  view:
+    backup:
+      status: implemented
+      payload: source
+    restore:
+      status: implemented
+  functionGroup:
+    backup:
+      status: implemented
+      payload: metadata-xml
+    restore:
+      status: implemented
+  functionModule:
+    backup:
+      status: implemented
+      payload: source
+    restore:
+      status: implemented
+  interface:
+    backup:
+      status: implemented
+      payload: source
+    restore:
+      status: implemented
+  class:
+    backup:
+      status: implemented
+      payload: source
+    restore:
+      status: implemented
+  program:
+    backup:
+      status: implemented
+      payload: source
+    restore:
+      status: implemented
+  serviceDefinition:
+    backup:
+      status: implemented
+      payload: source
+    restore:
+      status: implemented
+  metadataExtension:
+    backup:
+      status: implemented
+      payload: source
+    restore:
+      status: implemented
+  behaviorDefinition:
+    backup:
+      status: implemented
+      payload: source
+    restore:
+      status: not-implemented
+      plan:
+        - "Extract implementationType and template fields from metadata."
+        - "Create behavior definition via AdtClient.getBehaviorDefinition().create()."
+        - "Apply source update after creation."
+  behaviorImplementation:
+    backup:
+      status: not-implemented
+      plan:
+        - "Resolve BIMP metadata to capture className and behaviorDefinition."
+        - "Dump generated class source and local handler sections."
+    restore:
+      status: not-implemented
+      plan:
+        - "Create behavior implementation class and update source sections."
+  enhancement:
+    backup:
+      status: not-implemented
+      plan:
+        - "Add ADT metadata reader for enhancement objects."
+    restore:
+      status: not-implemented
+      plan:
+        - "Wire create/update through AdtClient enhancement APIs."
+  unitTest:
+    backup:
+      status: not-implemented
+      plan:
+        - "Discover unit test objects in package contents."
+        - "Extract test class sources and dependencies."
+    restore:
+      status: not-implemented
+      plan:
+        - "Create test classes and reattach to target package."
+  cdsUnitTest:
+    backup:
+      status: not-implemented
+      plan:
+        - "Locate CDS test objects and extract source code."
+    restore:
+      status: not-implemented
+      plan:
+        - "Create CDS test classes and related artifacts."
