@@ -1,3 +1,7 @@
 node_modules
 dist
 tsconfig.tsbuildinfo
+.npm-cache
+*.tgz
+mdd.env
+mdd.json
