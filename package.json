@@ -2,10 +2,10 @@
   "name": "@mcp-abap-adt/adt-backup",
   "version": "0.1.0",
   "description": "ADT backup CLI for SAP ABAP objects (recursive package backups and restores)",
-  "main": "dist/cli/adt-backup.js",
-  "types": "dist/cli/adt-backup.d.ts",
+  "main": "dist/bin/adt-backup.js",
+  "types": "dist/bin/adt-backup.d.ts",
   "bin": {
-    "adt-backup": "dist/cli/adt-backup.js"
+    "adt-backup": "dist/bin/adt-backup.js"
   },
   "files": [
     "dist",
@@ -45,7 +45,7 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@mcp-abap-adt/adt-clients": "^0.3.1",
+    "@mcp-abap-adt/adt-clients": "^0.3.2",
     "@mcp-abap-adt/auth-broker": "^0.2.14",
     "@mcp-abap-adt/auth-providers": "^0.2.10",
     "@mcp-abap-adt/auth-stores": "^0.2.10",
