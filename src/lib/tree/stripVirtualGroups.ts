@@ -6,7 +6,7 @@ export function stripVirtualGroups(root: BackupTreeNode): BackupTreeNode {
   const collect = (node: BackupTreeNode): void => {
     const { children, ...nodeBase } = node;
     const isPackageNode = node.type === 'package' || node.adtType === 'DEVC/K';
-    const isObjectNode = Boolean(node.adtType && node.adtType.includes('/'));
+    const isObjectNode = Boolean(node.adtType?.includes('/'));
     if ((isObjectNode || isPackageNode) && node.type !== 'package') {
       objects.push(nodeBase);
     }

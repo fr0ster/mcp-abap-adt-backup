@@ -1,3 +1,6 @@
+export * from './applyTransportRequest';
+export * from './collectDeletionTargets';
+export * from './deleteBackupObjects';
 export * from './restoreObject';
 export * from './restoreObjects';
 export * from './restoreTreeBackup';

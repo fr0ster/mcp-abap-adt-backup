@@ -11,7 +11,6 @@ export * from './flattenTree';
 export * from './formatTreeListText';
 export * from './getNodeFunctionGroupName';
 export * from './getPackageContents';
-export * from './groupTreeByPackage';
 export * from './isRestoreImplemented';
 export * from './mapAdtTypeToSupported';
 export * from './readPayloadForType';

@@ -10,6 +10,7 @@ export async function restoreTreeBackup(
   root: BackupTreeNode,
   mode: RestoreMode,
   activate: boolean,
+  transportRequest?: string,
 ): Promise<void> {
   const nodes = flattenTree(root).filter(
     (node) => node.type && node.restoreStatus === 'ok',
@@ -29,12 +30,24 @@ export async function restoreTreeBackup(
     logVerbose(3, `Restore ${node.type}:${node.name}`);
     if (mode === 'upsert') {
       try {
-        await restoreTreeNode(client, node, 'create', activate);
+        await restoreTreeNode(
+          client,
+          node,
+          'create',
+          activate,
+          transportRequest,
+        );
       } catch (_error) {
-        await restoreTreeNode(client, node, 'update', activate);
+        await restoreTreeNode(
+          client,
+          node,
+          'update',
+          activate,
+          transportRequest,
+        );
       }
     } else {
-      await restoreTreeNode(client, node, mode, activate);
+      await restoreTreeNode(client, node, mode, activate, transportRequest);
     }
   }
 }

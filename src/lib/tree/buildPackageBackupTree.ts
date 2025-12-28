@@ -1,6 +1,5 @@
 import type { AdtClient } from '@mcp-abap-adt/adt-clients';
 import type { BackupTreeFile } from '../types';
-import { buildPackageBackupTreeFromNodeStructure } from './buildPackageBackupTreeFromNodeStructure';
 import { buildPackageBackupTreeFromVirtualFolders } from './buildPackageBackupTreeFromVirtualFolders';
 
 export async function buildPackageBackupTree(

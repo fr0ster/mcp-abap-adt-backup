@@ -19,6 +19,7 @@ import { encodeBase64 } from './crypto/encodeBase64';
 import { updateTreeChecksums } from './crypto/updateTreeChecksums';
 import { verifyBackupChecksum } from './crypto/verifyBackupChecksum';
 import { verifyTreeChecksums } from './crypto/verifyTreeChecksums';
+import { deleteBackupObjects } from './restore/deleteBackupObjects';
 import { restoreObjects } from './restore/restoreObjects';
 import { restoreTreeBackup } from './restore/restoreTreeBackup';
 import { verbosityState } from './state/verbosity';
@@ -37,6 +38,8 @@ import type {
 } from './types';
 import { formatObjectSpec } from './utils/formatObjectSpec';
 import { parseObjectSpec } from './utils/parseObjectSpec';
+import { formatVerifyResultsText } from './verify/formatVerifyResultsText';
+import { verifyBackup } from './verify/verifyBackup';
 
 export async function run(): Promise<void> {
   const argv = process.argv.slice(2);
@@ -345,6 +348,34 @@ export async function run(): Promise<void> {
     return;
   }
 
+  if (command === 'verify') {
+    const input = args.input;
+    if (typeof input !== 'string') {
+      throw new Error('Missing --input');
+    }
+    const format = typeof args.format === 'string' ? args.format : 'text';
+    const strict = Boolean(args.strict);
+    const raw = fs.readFileSync(input, 'utf8');
+    const parsed = YAML.parse(raw) as BackupFile | BackupTreeFile;
+    if (!parsed || typeof parsed !== 'object') {
+      throw new Error('Invalid backup file format');
+    }
+    verifyBackupChecksum(parsed);
+    if ((parsed as BackupTreeFile).schemaVersion === 2) {
+      verifyTreeChecksums((parsed as BackupTreeFile).root);
+    }
+    const result = await verifyBackup(client, parsed, { strict });
+    if (format === 'json') {
+      console.log(JSON.stringify(result, null, 2));
+    } else {
+      console.log(formatVerifyResultsText(result.entries, result.summary));
+    }
+    if (result.summary.conflicts > 0) {
+      throw new Error(`Conflicts found: ${result.summary.conflicts}`);
+    }
+    return;
+  }
+
   if (command === 'restore') {
     const input = args.input;
     if (typeof input !== 'string') {
@@ -358,12 +389,41 @@ export async function run(): Promise<void> {
     if (!parsed || typeof parsed !== 'object') {
       throw new Error('Invalid backup file format');
     }
+    const force = Boolean(args.force);
+    const strict = Boolean(args.strict);
+    const dangerous = Boolean(args.dangerous);
+    const transportRequest =
+      typeof args.transport === 'string' ? args.transport : undefined;
+    if (transportRequest) {
+      logVerbose(1, `Using transport request for restore: ${transportRequest}`);
+    }
     if ((parsed as BackupTreeFile).schemaVersion === 2) {
       const tree = parsed as BackupTreeFile;
       verifyBackupChecksum(tree);
       verifyTreeChecksums(tree.root);
+      if (dangerous) {
+        logVerbose(
+          1,
+          `Dangerous mode: deleting ${tree.package} objects from backup before restore`,
+        );
+        await deleteBackupObjects(client, tree, transportRequest);
+      }
+      if (!force) {
+        const result = await verifyBackup(client, tree, { strict });
+        if (result.summary.conflicts > 0) {
+          throw new Error(
+            `Conflicts found: ${result.summary.conflicts}. Use --force to restore anyway.`,
+          );
+        }
+      }
       logVerbose(2, `Restoring tree backup for package ${tree.package}`);
-      await restoreTreeBackup(client, tree.root, mode, activate);
+      await restoreTreeBackup(
+        client,
+        tree.root,
+        mode,
+        activate,
+        transportRequest,
+      );
       console.log('Restore completed');
       return;
     }
@@ -372,8 +432,25 @@ export async function run(): Promise<void> {
     }
     const flat = parsed as BackupFile;
     verifyBackupChecksum(flat);
+    if (dangerous) {
+      throw new Error('Dangerous mode is supported only for package backups');
+    }
+    if (!force) {
+      const result = await verifyBackup(client, flat, { strict });
+      if (result.summary.conflicts > 0) {
+        throw new Error(
+          `Conflicts found: ${result.summary.conflicts}. Use --force to restore anyway.`,
+        );
+      }
+    }
     logVerbose(2, `Restoring flat backup (${flat.objects.length} objects)`);
-    await restoreObjects(client, flat.objects, mode, activate);
+    await restoreObjects(
+      client,
+      flat.objects,
+      mode,
+      activate,
+      transportRequest,
+    );
     console.log(`Restore completed for ${flat.objects.length} object(s)`);
     return;
   }

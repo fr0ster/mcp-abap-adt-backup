@@ -9,4 +9,5 @@ export * from './state';
 export * from './tree';
 export * from './types';
 export * from './utils';
+export * from './verify';
 export * from './xml';

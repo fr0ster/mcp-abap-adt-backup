@@ -20,12 +20,14 @@ import type { BackupObject, RestoreMode } from '../types';
 import { applyConfigName } from '../utils/applyConfigName';
 import { asConfig } from '../utils/asConfig';
 import { ensureDescription } from '../utils/ensureDescription';
+import { applyTransportRequest } from './applyTransportRequest';
 
 export async function restoreObject(
   client: AdtClient,
   obj: BackupObject,
   mode: RestoreMode,
   activate: boolean,
+  transportRequest?: string,
 ): Promise<void> {
   const baseConfig = applyConfigName(
     obj.type,
@@ -33,7 +35,10 @@ export async function restoreObject(
     obj.functionGroupName,
     obj.config,
   );
-  const config = ensureDescription(baseConfig, obj.name);
+  const config = applyTransportRequest(
+    ensureDescription(baseConfig, obj.name),
+    transportRequest,
+  );
 
   const options = {
     activateOnCreate: activate,

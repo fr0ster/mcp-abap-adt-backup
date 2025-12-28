@@ -39,13 +39,14 @@
     "lint:check": "npx biome check src",
     "format": "npx biome format --write src",
     "build": "npm run --silent clean && npx biome check src --diagnostic-level=error && npx tsc -p tsconfig.json",
-    "build:fast": "npx tsc -p tsconfig.json"
+    "build:fast": "npx tsc -p tsconfig.json",
+    "test:integration": "node scripts/integration-test.mjs"
   },
   "engines": {
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@mcp-abap-adt/adt-clients": "^0.3.2",
+    "@mcp-abap-adt/adt-clients": "^0.3.6",
     "@mcp-abap-adt/auth-broker": "^0.2.14",
     "@mcp-abap-adt/auth-providers": "^0.2.10",
     "@mcp-abap-adt/auth-stores": "^0.2.10",

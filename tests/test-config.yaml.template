@@ -1,0 +1,30 @@
+# Integration test configuration for @mcp-abap-adt/adt-backup
+# Copy this file to tests/test-config.yaml and fill in real values
+
+auth_broker:
+  # Destination base directory (contains service-keys/ and sessions/ subfolders)
+  # Example (Linux): /home/user/.config/mcp-abap-adt
+  # Example (Windows): C:\\Users\\User\\Documents\\mcp-abap-adt
+  destination_dir: <DESTINATION_DIR>
+
+  # Optional: explicit .env file path (uses --env flow)
+  environment_file: <ENVIRONMENT_FILE>
+
+  # ABAP destination configuration
+  abap:
+    # Destination name used for service key and session files
+    destination: <TEST_ABAP_DESTINATION>
+
+tests:
+  # Group 1: Backup tests
+  backup:
+    # Output directory for test artifacts
+    output_dir: <OUTPUT_DIR>
+
+    # Package backup test
+    package:
+      name: <PACKAGE_NAME>
+
+    # Single-object backup test (class)
+    class:
+      name: <CLASS_NAME>

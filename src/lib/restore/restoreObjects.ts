@@ -9,6 +9,7 @@ export async function restoreObjects(
   objects: BackupObject[],
   mode: RestoreMode,
   activate: boolean,
+  transportRequest?: string,
 ): Promise<void> {
   const ordered = sortByDependencies(objects);
   logVerbose(
@@ -19,12 +20,12 @@ export async function restoreObjects(
     logVerbose(3, `Restore ${obj.type}:${obj.name}`);
     if (mode === 'upsert') {
       try {
-        await restoreObject(client, obj, 'create', activate);
+        await restoreObject(client, obj, 'create', activate, transportRequest);
       } catch (_error) {
-        await restoreObject(client, obj, 'update', activate);
+        await restoreObject(client, obj, 'update', activate, transportRequest);
       }
     } else {
-      await restoreObject(client, obj, mode, activate);
+      await restoreObject(client, obj, mode, activate, transportRequest);
     }
   }
 }

@@ -5,3 +5,4 @@ tsconfig.tsbuildinfo
 *.tgz
 mdd.env
 mdd.json
+tests/test-config.yaml

@@ -20,17 +20,22 @@ import { decodeBase64 } from '../crypto/decodeBase64';
 import type { BackupTreeNode, RestoreMode } from '../types';
 import { asConfig } from '../utils/asConfig';
 import { ensureDescription } from '../utils/ensureDescription';
+import { applyTransportRequest } from './applyTransportRequest';
 
 export async function restoreTreeNode(
   client: AdtClient,
   node: BackupTreeNode,
   mode: RestoreMode,
   activate: boolean,
+  transportRequest?: string,
 ): Promise<void> {
   if (!node.type || node.restoreStatus !== 'ok') {
     return;
   }
-  const config = ensureDescription(node.config || {}, node.name);
+  const config = applyTransportRequest(
+    ensureDescription(node.config || {}, node.name),
+    transportRequest,
+  );
   const payload = node.codeBase64 ? decodeBase64(node.codeBase64) : undefined;
   const options = {
     activateOnCreate: activate,
