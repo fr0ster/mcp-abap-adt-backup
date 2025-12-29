@@ -1,4 +1,4 @@
-import type { AdtClient } from '@mcp-abap-adt/adt-clients';
+import type { AdtClient, ObjectReference } from '@mcp-abap-adt/adt-clients';
 import { logVerbose } from '../cli/logVerbose';
 import { typeOrder } from '../constants/typeOrder';
 import { flattenTree } from '../tree/flattenTree';
@@ -42,6 +42,9 @@ export async function restoreTreeBackup(
     2,
     `Restoring ${orderedNodes.length} node(s) from tree (mode=${mode}, activate=${activate})`,
   );
+
+  const activationList: ObjectReference[] = [];
+
   for (const node of orderedNodes) {
     logVerbose(3, `Restore ${node.type}:${node.name}`);
     const nodeId = getNodeObjectId(node);
@@ -49,8 +52,11 @@ export async function restoreTreeBackup(
       mode === 'upsert' && nodeId && restoreActions?.has(nodeId)
         ? restoreActions.get(nodeId)
         : mode;
-    const effectiveActivate =
-      nodeMode === 'create' ? activateOnCreate : activate;
+    const shouldActivate = nodeMode === 'create' ? activateOnCreate : activate;
+    const isPackage = node.type === 'package';
+    // Defer activation for non-package objects if activation is requested
+    const effectiveActivate = isPackage ? shouldActivate : false;
+
     if (nodeMode === 'upsert') {
       try {
         await restoreTreeNode(
@@ -78,5 +84,14 @@ export async function restoreTreeBackup(
         transportRequest,
       );
     }
+
+    if (!isPackage && shouldActivate && node.adtType) {
+      activationList.push({ name: node.name, type: node.adtType });
+    }
+  }
+
+  if (activationList.length > 0) {
+    logVerbose(2, `Activating ${activationList.length} object(s)...`);
+    await client.getUtils().activateObjectsGroup(activationList);
   }
 }
