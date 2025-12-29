@@ -117,9 +117,22 @@ export async function collectTreeDependencies(
         ? `${spec.functionGroupName}|${spec.name}`
         : spec.name;
     try {
+      const scopeResponse = await client.getUtils().getWhereUsedScope({
+        object_name: objectName,
+        object_type: whereUsedType,
+      });
+      const scopeXml = responseToText(scopeResponse);
+      if (!scopeXml) {
+        continue;
+      }
+      const enabledScope = client
+        .getUtils()
+        .modifyWhereUsedScope(scopeXml, { enableAll: true });
+
       const response = await client.getUtils().getWhereUsed({
         object_name: objectName,
         object_type: whereUsedType,
+        scopeXml: enabledScope,
       });
       const xml = responseToText(response);
       if (!xml) {

@@ -4,6 +4,8 @@ import { AdtClient, type ObjectReference } from '@mcp-abap-adt/adt-clients';
 import { createAbapConnection } from '@mcp-abap-adt/connection';
 import { getSapConfigFromBroker } from '../src/lib/auth/getSapConfigFromBroker';
 import { createLogger } from '../src/lib/cli/createLogger';
+import { mapAdtTypeToSupported } from '../src/lib/tree/mapAdtTypeToSupported';
+import { typeOrder } from '../src/lib/constants/typeOrder';
 
 async function confirm(message: string): Promise<boolean> {
   const rl = readline.createInterface({
@@ -67,14 +69,30 @@ async function run() {
     // Flatten hierarchy using post-order traversal (children first)
     const allNodes = flattenHierarchy(hierarchy);
     
-    // Filter out objects that don't have an adtType (root node might if it's just a container, but usually it's the package itself)
-    // We also want to delete the package itself, which should be the last item in post-order list if getPackageHierarchy returns it as root
+    // Create priority map for deletion (reverse creation order)
+    // Higher index in typeOrder = created later = delete earlier
+    // So we sort descending by index
+    const priority = new Map(typeOrder.map((type, index) => [type, index]));
+
     const objectsToDelete: ObjectReference[] = allNodes
       .filter(n => n.adtType && n.name)
       .map(n => ({
         type: n.adtType!,
         name: n.name,
-      }));
+      }))
+      .sort((a, b) => {
+        const typeA = mapAdtTypeToSupported(a.type);
+        const typeB = mapAdtTypeToSupported(b.type);
+        
+        // If types are unknown, put them at the beginning (safest assumption? or end?)
+        // typeOrder contains known types.
+        const orderA = typeA ? (priority.get(typeA) ?? -1) : -1;
+        const orderB = typeB ? (priority.get(typeB) ?? -1) : -1;
+
+        // Descending order of index (delete "higher" types first)
+        // e.g. Class (idx 10) before Package (idx 0)
+        return orderB - orderA; 
+      });
 
     if (objectsToDelete.length === 0) {
       console.log('No objects found to delete.');
@@ -98,11 +116,30 @@ Using Transport Request: ${transportRequest}`);
 
     console.log('Checking deletion...');
     // Optional: Check deletion first
-    await client.getUtils().checkDeletionGroup(objectsToDelete);
-    console.log('Check passed. Deleting...');
+    try {
+      await client.getUtils().checkDeletionGroup(objectsToDelete);
+      console.log('Check passed.');
+    } catch (error: any) {
+       console.warn('Check warning:', error.message);
+    }
 
-    await client.getUtils().deleteObjectsGroup(objectsToDelete, transportRequest);
-    console.log('Successfully deleted objects.');
+    console.log('Deleting objects sequentially...');
+    for (const obj of objectsToDelete) {
+        process.stdout.write(`Deleting ${obj.type} ${obj.name}... `);
+        try {
+            // We use deleteObjectsGroup for single object as well, or we can look for individual delete method.
+            // But deleteObjectsGroup takes an array, so passing [obj] is fine.
+            await client.getUtils().deleteObjectsGroup([obj], transportRequest);
+            console.log('OK');
+        } catch (error: any) {
+            console.log('FAILED');
+            console.error(`  Error deleting ${obj.name}: ${error.message}`);
+             if (error.response) {
+                 console.error('  Status:', error.response.status);
+             }
+        }
+    }
+    console.log('Deletion process finished.');
 
   } catch (error: any) {
     console.error('Error:', error.message);
