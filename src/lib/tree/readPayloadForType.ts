@@ -21,6 +21,7 @@ export async function readPayloadForType(
     case 'metadataExtension':
     case 'behaviorDefinition':
     case 'behaviorImplementation':
+    case 'enhancement':
     case 'tableType': {
       const payload = await readSourceText(client, {
         type,

@@ -23,7 +23,7 @@ function buildArrayItemKey(item: NodeRecord): string | undefined {
 }
 
 function normalizeKey(key: string): string {
-  return key.replace(/[\[\]\s]/g, '_');
+  return key.replace(/[[\]\s]/g, '_');
 }
 
 function visit(value: NodeValue, path: string, out: Map<string, string>): void {

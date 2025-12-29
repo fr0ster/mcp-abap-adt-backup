@@ -166,7 +166,8 @@ export async function backupObject(
         source,
       };
     }
-    case 'behaviorImplementation': {
+    case 'behaviorImplementation':
+    case 'enhancement': {
       const metadataXml = await readMetadataXmlForType(
         client,
         spec.type,
@@ -174,12 +175,12 @@ export async function backupObject(
       );
       const metadata = metadataXml ? extractMetadata(metadataXml) : {};
       const source = await readSourceText(client, spec);
-      const behaviorDefinition = parseBehaviorDefinitionFromClass(source);
       const config = applyConfigName(spec.type, spec.name, undefined, {
         description: metadata.description,
         packageName: metadata.packageName,
-        behaviorDefinition,
-        sourceCode: source,
+        ...(spec.type === 'behaviorImplementation' && source
+          ? { behaviorDefinition: parseBehaviorDefinitionFromClass(source) }
+          : {}),
       });
       return {
         id,

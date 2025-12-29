@@ -99,19 +99,16 @@ objectTypes:
         - "Apply source update after creation."
   behaviorImplementation:
     backup:
-      status: not-implemented
-      plan:
-        - "Resolve BIMP metadata to capture className and behaviorDefinition."
-        - "Dump generated class source and local handler sections."
+      status: implemented
+      payload: source
     restore:
       status: not-implemented
       plan:
         - "Create behavior implementation class and update source sections."
   enhancement:
     backup:
-      status: not-implemented
-      plan:
-        - "Add ADT metadata reader for enhancement objects."
+      status: implemented
+      payload: source
     restore:
       status: not-implemented
       plan:

@@ -42,16 +42,33 @@ export function formatLogMeta(meta: unknown): string {
     isAxiosError?: boolean;
     message?: string;
     code?: string;
-    response?: { status?: number };
-    config?: { url?: string; method?: string };
+    response?: { status?: number; data?: unknown };
+    config?: {
+      url?: string;
+      method?: string;
+      headers?: Record<string, unknown>;
+      params?: unknown;
+    };
   };
-  if (record && record.isAxiosError) {
+  if (record?.isAxiosError) {
+    const headers = record.config?.headers
+      ? { ...record.config.headers }
+      : undefined;
+    if (headers) {
+      // Redact common sensitive headers
+      if (headers.Authorization) headers.Authorization = '***';
+      if (headers['X-CSRF-Token']) headers['X-CSRF-Token'] = '***';
+      if (headers.Cookie) headers.Cookie = '***';
+    }
     return safeStringify({
       message: record.message,
       code: record.code,
       status: record.response?.status,
       url: record.config?.url,
       method: record.config?.method,
+      params: record.config?.params,
+      headers: headers,
+      data: record.response?.data,
     });
   }
   if (meta instanceof Error) {

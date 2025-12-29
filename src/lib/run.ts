@@ -672,7 +672,7 @@ export async function run(): Promise<void> {
     const raw = fs.readFileSync(input, 'utf8');
     const mode = (args.mode as RestoreMode) || 'upsert';
     const activateOnUpdate =
-      Boolean(args.activate) || !Boolean(args['no-activate-on-update']);
+      Boolean(args.activate) || !args['no-activate-on-update'];
     const parsed = YAML.parse(raw) as BackupFile | BackupTreeFile;
     if (!parsed || typeof parsed !== 'object') {
       throw new Error('Invalid backup file format');
@@ -680,7 +680,7 @@ export async function run(): Promise<void> {
     const force = Boolean(args.force);
     const strict = Boolean(args.strict);
     const dangerous = Boolean(args.dangerous);
-    const activateOnCreate = !Boolean(args['no-activate-on-create']);
+    const activateOnCreate = !args['no-activate-on-create'];
     const transportRequest =
       typeof args.transport === 'string' ? args.transport : undefined;
     if (transportRequest) {

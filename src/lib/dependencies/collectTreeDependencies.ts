@@ -157,9 +157,6 @@ export async function collectTreeDependencies(
         3,
         `Dependencies: ${formatObjectSpec(spec)} -> ${usedBy.size}`,
       );
-    } catch (_error) {
-      // where-used is optional; skip on errors
-      continue;
-    }
+    } catch (_error) {}
   }
 }

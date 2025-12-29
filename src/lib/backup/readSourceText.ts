@@ -86,6 +86,19 @@ export async function readSourceText(
         .read({ className: spec.name }, 'active');
       return responseToText(state?.readResult);
     }
+    case 'enhancement': {
+      // For enhancement we need to know the type, but since we don't have it in spec easily
+      // and it's mostly used for BAdI implementations in this context, we try to read it
+      // via general enhancement client if available or skip.
+      // Assuming 'enhoxh' (Enhancement Implementation) as default for now if not specified.
+      const state = await client
+        .getEnhancement()
+        .read(
+          { enhancementName: spec.name, enhancementType: 'enhoxh' },
+          'active',
+        );
+      return responseToText(state?.readResult);
+    }
     default:
       return undefined;
   }

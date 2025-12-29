@@ -1,0 +1,3 @@
+Fetching virtual folders for ZOK_TEST_PKG_01...
+Success: 200
+<?xml version="1.0" encoding="utf-8"?><vfs:virtualFoldersResult objectCount="24" xmlns:vfs="http://www.sap.com/adt/ris/virtualFolders"><vfs:preselectionInfo facet="PACKAGE" hasChildrenOfSameFacet="true"/><atom:link href="/sap/bc/adt/repository/informationsystem/virtualfolders?selection=package%3aZOK_TEST_PKG_01" rel="http://www.sap.com/adt/relations/informationsystem/virtualfolders/selection" title="Virtual Folder Selection" xmlns:atom="http://www.w3.org/2005/Atom"/><vfs:virtualFolder hasChildre

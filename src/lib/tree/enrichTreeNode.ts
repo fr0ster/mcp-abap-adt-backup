@@ -62,7 +62,7 @@ export async function enrichTreeNode(
     }
   }
 
-  if (mappedType && includeCode && isRestoreImplemented(mappedType)) {
+  if (mappedType && includeCode) {
     const payload = await readPayloadForType(
       client,
       mappedType,
@@ -83,8 +83,6 @@ export async function enrichTreeNode(
           };
         }
       }
-    } else {
-      nextNode.restoreStatus = 'not-implemented';
     }
   }
 
