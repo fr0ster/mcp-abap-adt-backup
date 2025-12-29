@@ -34,7 +34,6 @@ import { collectTreeObjects } from './tree/collectTreeObjects';
 import { findNodeInTree } from './tree/findNodeInTree';
 import { formatTreeListText } from './tree/formatTreeListText';
 import { getNodeObjectSpec } from './tree/getNodeObjectSpec';
-import { stripCodeFromTree } from './tree/stripCodeFromTree';
 import type {
   BackupFile,
   BackupObject,
@@ -315,7 +314,7 @@ export async function run(): Promise<void> {
       logVerbose(2, `Starting package backup for ${packageName}`);
       const output =
         typeof args.output === 'string' ? args.output : 'backup.yaml';
-      const tree = await buildPackageBackupTree(client, packageName, true);
+      const tree = await buildPackageBackupTree(client, packageName);
       updateTreeChecksums(tree.root);
       tree.checksum = computeBackupChecksum(tree);
       const yamlText = YAML.stringify(tree, { lineWidth: 0 });
@@ -352,26 +351,6 @@ export async function run(): Promise<void> {
     const yamlText = YAML.stringify(payload, { lineWidth: 0 });
     fs.writeFileSync(output, yamlText, 'utf8');
     console.log(`Backup written to ${output}`);
-    return;
-  }
-
-  if (command === 'tree') {
-    const packageName =
-      typeof args.package === 'string' ? args.package : undefined;
-    if (!packageName) {
-      throw new Error('Missing --package');
-    }
-    logVerbose(2, `Starting tree preview for ${packageName}`);
-    const output = typeof args.output === 'string' ? args.output : 'tree.yaml';
-    const tree = await buildPackageBackupTree(client, packageName, false);
-    const lightTree: BackupTreeFile = {
-      ...tree,
-      root: stripCodeFromTree(tree.root),
-    };
-    lightTree.checksum = computeBackupChecksum(lightTree);
-    const yamlText = YAML.stringify(lightTree, { lineWidth: 0 });
-    fs.writeFileSync(output, yamlText, 'utf8');
-    console.log(`Tree written to ${output}`);
     return;
   }
 

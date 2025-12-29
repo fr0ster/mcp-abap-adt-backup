@@ -10,4 +10,3 @@ export * from './getNodeFunctionGroupName';
 export * from './isRestoreImplemented';
 export * from './mapAdtTypeToSupported';
 export * from './readPayloadForType';
-export * from './stripCodeFromTree';

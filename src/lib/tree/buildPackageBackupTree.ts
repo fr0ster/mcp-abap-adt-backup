@@ -7,7 +7,6 @@ import { enrichTreeNode } from './enrichTreeNode';
 export async function buildPackageBackupTree(
   client: AdtClient,
   packageName: string,
-  includeCode: boolean,
 ): Promise<BackupTreeFile> {
   const packageNameUpper = packageName.toUpperCase();
   logVerbose(2, `Fetching package hierarchy for ${packageNameUpper}`);
@@ -21,12 +20,10 @@ export async function buildPackageBackupTree(
   };
 
   logVerbose(2, `Building node tree for ${packageNameUpper}`);
-  const enrichedRoot = await enrichTreeNode(rootTree, client, includeCode);
+  const enrichedRoot = await enrichTreeNode(rootTree, client, true);
 
-  if (includeCode) {
-    logVerbose(2, `Collecting where-used dependencies for ${packageNameUpper}`);
-    await collectTreeDependencies(client, enrichedRoot);
-  }
+  logVerbose(2, `Collecting where-used dependencies for ${packageNameUpper}`);
+  await collectTreeDependencies(client, enrichedRoot);
 
   return {
     schemaVersion: 2,
