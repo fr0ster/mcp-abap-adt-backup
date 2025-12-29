@@ -48,3 +48,7 @@ Use `-v` for main stages, `-vv` for per-object details, and `-vvv` for ADT/conne
 ## Roadmap
 
 See `docs/roadmap.yaml` for per-object backup/restore status and the plan for remaining types.
+
+## Changelog
+
+See [CHANGELOG.md](./CHANGELOG.md) for a history of changes.
