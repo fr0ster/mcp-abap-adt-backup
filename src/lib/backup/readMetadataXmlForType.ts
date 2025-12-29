@@ -41,6 +41,10 @@ export async function readMetadataXmlForType(
         .readMetadata({ tableTypeName: name });
       return responseToText(state.metadataResult);
     }
+    case 'view': {
+      const state = await client.getView().readMetadata({ viewName: name });
+      return responseToText(state.metadataResult);
+    }
     case 'domain': {
       const state = await client.getDomain().readMetadata({ domainName: name });
       return responseToText(state.metadataResult);
@@ -84,8 +88,10 @@ export async function readMetadataXmlForType(
       return responseToText(state.metadataResult);
     }
     case 'behaviorDefinition': {
-      const state = await client.getBehaviorDefinition().readMetadata({ name });
-      return responseToText(state.metadataResult);
+      const state = await client
+        .getBehaviorDefinition()
+        .read({ name }, 'active');
+      return responseToText(state?.readResult);
     }
     case 'behaviorImplementation': {
       const state = await client

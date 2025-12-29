@@ -2,10 +2,25 @@ import type { AdtClient } from '@mcp-abap-adt/adt-clients';
 import { readMetadataXmlForType } from '../backup/readMetadataXmlForType';
 import { readSourceText } from '../backup/readSourceText';
 import { decodeBase64 } from '../crypto/decodeBase64';
+import { verbosityState } from '../state/verbosity';
 import type { ObjectSpec } from '../types';
 import { extractMetadata } from '../xml/extractMetadata';
 import { findOtherType } from './findOtherType';
 import type { VerifyEntry } from './types';
+
+type AxiosLikeError = {
+  isAxiosError?: boolean;
+  response?: { status?: number };
+  message?: string;
+};
+
+function getHttpStatus(error: unknown): number | undefined {
+  const axiosError = error as AxiosLikeError | undefined;
+  if (axiosError && axiosError.isAxiosError) {
+    return axiosError.response?.status;
+  }
+  return undefined;
+}
 
 export async function verifyObjectInSystem(
   client: AdtClient,
@@ -13,6 +28,7 @@ export async function verifyObjectInSystem(
   expectedPackage?: string,
   expectedSource?: string,
   expectedSourceBase64?: string,
+  expectedFormat?: 'source' | 'xml' | 'json',
 ): Promise<VerifyEntry> {
   const base: VerifyEntry = {
     type: spec.type,
@@ -31,17 +47,27 @@ export async function verifyObjectInSystem(
       spec.functionGroupName,
     );
   } catch (error) {
-    const otherType = await findOtherType(client, spec.type, spec.name);
-    if (otherType) {
+    const status = getHttpStatus(error);
+    if (status === 404 || status === 410) {
+      if (verbosityState.level >= 3) {
+        const otherType = await findOtherType(client, spec.type, spec.name);
+        if (otherType) {
+          return {
+            ...base,
+            status: 'type-mismatch',
+            message: `Found object of type ${otherType}`,
+          };
+        }
+      }
       return {
         ...base,
-        status: 'type-mismatch',
-        message: `Found object of type ${otherType}`,
+        status: 'missing',
+        message: error instanceof Error ? error.message : String(error),
       };
     }
     return {
       ...base,
-      status: 'missing',
+      status: 'error',
       message: error instanceof Error ? error.message : String(error),
     };
   }
@@ -77,9 +103,18 @@ export async function verifyObjectInSystem(
       : expectedSource;
 
   if (expectedText !== undefined) {
-    try {
-      const actualSource = await readSourceText(client, spec);
-      if (actualSource !== undefined) {
+    if (expectedFormat === 'xml') {
+      return base;
+    } else {
+      try {
+        const actualSource = await readSourceText(client, spec);
+        if (actualSource === undefined) {
+          return {
+            ...base,
+            status: 'error',
+            message: 'Source not available for comparison',
+          };
+        }
         if (expectedText !== actualSource) {
           return {
             ...base,
@@ -87,13 +122,13 @@ export async function verifyObjectInSystem(
             message: 'Source differs from backup',
           };
         }
+      } catch (error) {
+        return {
+          ...base,
+          status: 'error',
+          message: error instanceof Error ? error.message : String(error),
+        };
       }
-    } catch (error) {
-      return {
-        ...base,
-        status: 'error',
-        message: error instanceof Error ? error.message : String(error),
-      };
     }
   }
 

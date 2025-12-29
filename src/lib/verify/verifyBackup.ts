@@ -30,6 +30,7 @@ export async function verifyBackup(
         getExpectedPackage(node.config),
         undefined,
         node.codeBase64,
+        node.codeFormat,
       );
       entries.push(entry);
     }
@@ -45,6 +46,8 @@ export async function verifyBackup(
         },
         getExpectedPackage(obj.config),
         obj.source,
+        undefined,
+        obj.source ? 'source' : undefined,
       );
       entries.push(entry);
     }

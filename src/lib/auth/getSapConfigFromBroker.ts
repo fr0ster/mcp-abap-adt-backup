@@ -135,13 +135,38 @@ async function getConfigWithStores(options: {
   );
 
   const session = await sessionStore.loadSession(destination);
-  const connection = await broker.getConnectionConfig(destination);
+  let connection = await broker.getConnectionConfig(destination);
+  if (!connection && authConfig && destination !== 'env') {
+    await broker.getToken(destination);
+    connection = await broker.getConnectionConfig(destination);
+  }
   if (!connection) {
     throw new Error(`Missing connection config for destination ${destination}`);
   }
 
-  const resolvedAuthType =
-    connection.authType || (connection.authorizationToken ? 'jwt' : 'basic');
+  if (
+    !connection.authorizationToken &&
+    !connection.username &&
+    !connection.password &&
+    authConfig &&
+    destination !== 'env'
+  ) {
+    await broker.getToken(destination);
+    connection = await broker.getConnectionConfig(destination);
+    if (!connection) {
+      throw new Error(
+        `Missing connection config for destination ${destination}`,
+      );
+    }
+  }
+
+  const resolvedAuthType = connection.authorizationToken
+    ? 'jwt'
+    : connection.username && connection.password
+      ? 'basic'
+      : authConfig && destination !== 'env'
+        ? 'jwt'
+        : connection.authType || 'basic';
   const serviceUrl = connection.serviceUrl || session?.serviceUrl;
   if (!serviceUrl) {
     throw new Error(`Missing service URL for destination ${destination}`);

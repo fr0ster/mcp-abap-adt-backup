@@ -32,7 +32,7 @@ export function applyLogEnv(level: number): void {
     process.env.DEBUG_STORES = 'false';
     process.env.DEBUG_AUTH_STORES = 'false';
     process.env.DEBUG_CONNECTORS = 'false';
-    process.env.DEBUG_ADT_LIBS = 'true';
+    process.env.DEBUG_ADT_LIBS = 'false';
     return;
   }
   process.env.LOG_LEVEL = 'error';

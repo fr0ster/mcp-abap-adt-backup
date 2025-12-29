@@ -7,6 +7,7 @@ export function stripCodeFromTree(node: BackupTreeNode): BackupTreeNode {
     type: node.type,
     description: node.description,
     functionGroupName: node.functionGroupName,
+    usedBy: node.usedBy,
   };
   if (node.type) {
     cleaned.restoreStatus = node.restoreStatus;

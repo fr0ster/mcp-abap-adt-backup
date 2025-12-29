@@ -1,14 +1,18 @@
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { AdtClient } from '@mcp-abap-adt/adt-clients';
 import { createAbapConnection } from '@mcp-abap-adt/connection';
 import YAML from 'yaml';
 import { getSapConfigFromBroker } from './auth/getSapConfigFromBroker';
 import { backupObject } from './backup/backupObject';
+import { readMetadataXmlForType } from './backup/readMetadataXmlForType';
+import { readSourceText } from './backup/readSourceText';
 import { applyLogEnv } from './cli/applyLogEnv';
 import { createLogger } from './cli/createLogger';
 import { getVerbosity } from './cli/getVerbosity';
 import { logVerbose } from './cli/logVerbose';
 import { parseArgs } from './cli/parseArgs';
+import { redactText, safeStringify } from './cli/redact';
 import { shouldEnableAdtLogger } from './cli/shouldEnableAdtLogger';
 import { shouldEnableConnectionLogger } from './cli/shouldEnableConnectionLogger';
 import { usage } from './cli/usage';
@@ -19,6 +23,7 @@ import { encodeBase64 } from './crypto/encodeBase64';
 import { updateTreeChecksums } from './crypto/updateTreeChecksums';
 import { verifyBackupChecksum } from './crypto/verifyBackupChecksum';
 import { verifyTreeChecksums } from './crypto/verifyTreeChecksums';
+import { buildRestorePlan } from './restore/buildRestorePlan';
 import { deleteBackupObjects } from './restore/deleteBackupObjects';
 import { restoreObjects } from './restore/restoreObjects';
 import { restoreTreeBackup } from './restore/restoreTreeBackup';
@@ -28,26 +33,41 @@ import { buildTreeList } from './tree/buildTreeList';
 import { collectTreeObjects } from './tree/collectTreeObjects';
 import { findNodeInTree } from './tree/findNodeInTree';
 import { formatTreeListText } from './tree/formatTreeListText';
+import { getNodeObjectSpec } from './tree/getNodeObjectSpec';
 import { stripCodeFromTree } from './tree/stripCodeFromTree';
 import type {
   BackupFile,
   BackupObject,
   BackupTreeFile,
+  BackupTreeNode,
   ObjectSpec,
   RestoreMode,
 } from './types';
+import { diffUnified } from './utils/diffUnified';
 import { formatObjectSpec } from './utils/formatObjectSpec';
 import { parseObjectSpec } from './utils/parseObjectSpec';
+import { collectBackupNodes } from './verify/collectBackupNodes';
+import { findOtherType } from './verify/findOtherType';
 import { formatVerifyResultsText } from './verify/formatVerifyResultsText';
 import { verifyBackup } from './verify/verifyBackup';
+import { extractMetadata } from './xml/extractMetadata';
 
 export async function run(): Promise<void> {
   const argv = process.argv.slice(2);
   verbosityState.level = getVerbosity(argv);
-  applyLogEnv(verbosityState.level);
   const logger = createLogger(verbosityState.level);
   const command = argv[0];
   const args = parseArgs(argv.slice(1));
+  const logFile = typeof args['log-file'] === 'string' ? args['log-file'] : '';
+  if (logFile) {
+    enableLogFile(logFile);
+  }
+  applyLogEnv(verbosityState.level);
+  const debugAdt = Boolean(args['debug-adt']);
+  if (debugAdt) {
+    process.env.DEBUG_ADT_LIBS = 'true';
+    process.env.DEBUG_CONNECTORS = 'true';
+  }
 
   if (!command || command === '--help' || command === '-h') {
     console.log(usage());
@@ -93,6 +113,7 @@ export async function run(): Promise<void> {
     }
     const format = typeof args.format === 'string' ? args.format : 'text';
     const flat = Boolean(args.flat);
+    const showDeps = Boolean(args.deps);
     const raw = fs.readFileSync(input, 'utf8');
     const parsed = YAML.parse(raw) as BackupFile | BackupTreeFile;
     if (!parsed || typeof parsed !== 'object') {
@@ -114,9 +135,11 @@ export async function run(): Promise<void> {
         return;
       }
       if (format === 'json') {
-        console.log(JSON.stringify(buildTreeList(tree.root), null, 2));
+        console.log(
+          JSON.stringify(buildTreeList(tree.root, { showDeps }), null, 2),
+        );
       } else {
-        const lines = formatTreeListText(tree.root);
+        const lines = formatTreeListText(tree.root, 0, { showDeps });
         console.log(lines.join('\n'));
       }
       return;
@@ -269,8 +292,12 @@ export async function run(): Promise<void> {
     authRoot,
     logger,
   });
-  const connectionLogger = shouldEnableConnectionLogger() ? logger : undefined;
-  const adtLogger = shouldEnableAdtLogger() ? logger : undefined;
+  const allowAdtLogs = verbosityState.level >= 2 || debugAdt;
+  const allowConnectionLogs = verbosityState.level >= 3 || debugAdt;
+  const connectionLogger =
+    allowConnectionLogs && shouldEnableConnectionLogger() ? logger : undefined;
+  const adtLogger =
+    allowAdtLogs && shouldEnableAdtLogger() ? logger : undefined;
   const connection = createAbapConnection(
     config,
     connectionLogger,
@@ -348,6 +375,266 @@ export async function run(): Promise<void> {
     return;
   }
 
+  if (command === 'diff') {
+    const input = args.input;
+    const objectSpec = args.object;
+    const diffAll = Boolean(args.all);
+    const showOk = Boolean(args['show-ok']);
+    const objectSpecValue = typeof objectSpec === 'string' ? objectSpec : '';
+    if (typeof input !== 'string') {
+      throw new Error('Missing --input');
+    }
+    if (!diffAll && typeof objectSpec !== 'string') {
+      throw new Error('Missing --object (or use --all)');
+    }
+    const raw = fs.readFileSync(input, 'utf8');
+    const parsed = YAML.parse(raw) as BackupFile | BackupTreeFile;
+    if (!parsed || typeof parsed !== 'object') {
+      throw new Error('Invalid backup file format');
+    }
+    verifyBackupChecksum(parsed);
+    const diffMetadata = async (
+      label: string,
+      backupText: string,
+      metadataXml: string,
+      showNoDiff: boolean,
+    ): Promise<boolean> => {
+      const beforeMeta = extractMetadata(backupText);
+      const afterMeta = extractMetadata(metadataXml);
+      const changes: Array<{ key: string; before?: string; after?: string }> =
+        [];
+      if (beforeMeta.packageName !== afterMeta.packageName) {
+        changes.push({
+          key: 'packageName',
+          before: beforeMeta.packageName,
+          after: afterMeta.packageName,
+        });
+      }
+      if (changes.length === 0) {
+        if (showNoDiff) {
+          console.log(`=== ${label}`);
+          console.log('No differences');
+        }
+        return false;
+      }
+      console.log(`=== ${label}`);
+      for (const change of changes) {
+        console.log(
+          `changed ${change.key}: "${change.before ?? ''}" -> "${change.after ?? ''}"`,
+        );
+      }
+      return true;
+    };
+
+    const diffSource = async (
+      label: string,
+      backupText: string,
+      actualSource: string,
+      showNoDiff: boolean,
+    ): Promise<boolean> => {
+      const unified = diffUnified(backupText, actualSource);
+      if (!unified.trim()) {
+        if (showNoDiff) {
+          console.log(`=== ${label}`);
+          console.log('No differences');
+        }
+        return false;
+      }
+      console.log(`=== ${label}`);
+      console.log(unified);
+      return true;
+    };
+
+    let hasAnyDiff = false;
+
+    if ((parsed as BackupTreeFile).schemaVersion === 2) {
+      const tree = parsed as BackupTreeFile;
+      verifyTreeChecksums(tree.root);
+      if (!diffAll) {
+        const spec = parseObjectSpec(objectSpecValue);
+        const node = findNodeInTree(tree.root, spec);
+        if (!node || !node.type) {
+          throw new Error(`Object not found: ${formatObjectSpec(spec)}`);
+        }
+        if (!node.codeBase64) {
+          throw new Error('Object has no payload to diff');
+        }
+        const label = formatObjectSpec(spec);
+        const backupText = decodeBase64(node.codeBase64);
+        if (node.codeFormat === 'xml') {
+          try {
+            const metadataXml = await readMetadataXmlForType(
+              client,
+              node.type,
+              node.name,
+              node.functionGroupName,
+            );
+            if (!metadataXml) {
+              throw new Error('Metadata not available for diff');
+            }
+            const hasDiff = await diffMetadata(
+              label,
+              backupText,
+              metadataXml,
+              true,
+            );
+            if (!hasDiff) {
+              console.log('No metadata differences detected');
+            }
+            return;
+          } catch (_error) {
+            const otherType = await findOtherType(client, node.type, node.name);
+            if (otherType && otherType !== node.type) {
+              console.log(`=== ${label}`);
+              console.log(`changed type: "${node.type}" -> "${otherType}"`);
+              return;
+            }
+            throw _error;
+          }
+        }
+        const actualSource = await readSourceText(client, {
+          type: node.type,
+          name: node.name,
+          functionGroupName: node.functionGroupName,
+        });
+        if (actualSource === undefined) {
+          throw new Error('Source not available for diff');
+        }
+        const hasDiff = await diffSource(label, backupText, actualSource, true);
+        if (!hasDiff) {
+          console.log('No source differences detected');
+        }
+        return;
+      }
+
+      const nodes: BackupTreeNode[] = [];
+      collectBackupNodes(tree.root, nodes);
+      for (const node of nodes) {
+        if (!node.type || !node.codeBase64) {
+          continue;
+        }
+        const spec = {
+          type: node.type,
+          name: node.name,
+          functionGroupName: node.functionGroupName,
+        } satisfies ObjectSpec;
+        const label = formatObjectSpec(spec);
+        const backupText = decodeBase64(node.codeBase64);
+        if (node.codeFormat === 'xml') {
+          try {
+            const metadataXml = await readMetadataXmlForType(
+              client,
+              node.type,
+              node.name,
+              node.functionGroupName,
+            );
+            if (!metadataXml) {
+              continue;
+            }
+            const hasDiff = await diffMetadata(
+              label,
+              backupText,
+              metadataXml,
+              showOk,
+            );
+            if (hasDiff) {
+              hasAnyDiff = true;
+            }
+            continue;
+          } catch (_error) {
+            const otherType = await findOtherType(client, node.type, node.name);
+            if (otherType && otherType !== node.type) {
+              console.log(`=== ${label}`);
+              console.log(`changed type: "${node.type}" -> "${otherType}"`);
+              hasAnyDiff = true;
+            }
+            continue;
+          }
+        }
+        const actualSource = await readSourceText(client, spec);
+        if (actualSource === undefined) {
+          continue;
+        }
+        const hasDiff = await diffSource(
+          label,
+          backupText,
+          actualSource,
+          showOk,
+        );
+        if (hasDiff) {
+          hasAnyDiff = true;
+        }
+      }
+      if (!hasAnyDiff) {
+        console.log('No differences detected');
+      }
+      return;
+    }
+
+    const flat = parsed as BackupFile;
+    if (!Array.isArray(flat.objects)) {
+      throw new Error('Invalid backup file format');
+    }
+    if (!diffAll) {
+      const spec = parseObjectSpec(objectSpecValue);
+      const obj = flat.objects.find(
+        (item) =>
+          item.type === spec.type &&
+          item.name === spec.name &&
+          (spec.functionGroupName
+            ? item.functionGroupName === spec.functionGroupName
+            : true),
+      );
+      if (!obj) {
+        throw new Error(`Object not found: ${formatObjectSpec(spec)}`);
+      }
+      if (!obj.source) {
+        throw new Error('Object has no payload to diff');
+      }
+      const actualSource = await readSourceText(client, spec);
+      if (actualSource === undefined) {
+        throw new Error('Source not available for diff');
+      }
+      const hasDiff = await diffSource(
+        formatObjectSpec(spec),
+        obj.source,
+        actualSource,
+        true,
+      );
+      if (!hasDiff) {
+        console.log('No source differences detected');
+      }
+      return;
+    }
+    for (const obj of flat.objects) {
+      if (!obj.source) {
+        continue;
+      }
+      const spec = {
+        type: obj.type,
+        name: obj.name,
+        functionGroupName: obj.functionGroupName,
+      } satisfies ObjectSpec;
+      const actualSource = await readSourceText(client, spec);
+      if (actualSource === undefined) {
+        continue;
+      }
+      const hasDiff = await diffSource(
+        formatObjectSpec(spec),
+        obj.source,
+        actualSource,
+        showOk,
+      );
+      if (hasDiff) {
+        hasAnyDiff = true;
+      }
+    }
+    if (!hasAnyDiff) {
+      console.log('No differences detected');
+    }
+    return;
+  }
+
   if (command === 'verify') {
     const input = args.input;
     if (typeof input !== 'string') {
@@ -384,7 +671,8 @@ export async function run(): Promise<void> {
     logVerbose(2, `Starting restore from ${input}`);
     const raw = fs.readFileSync(input, 'utf8');
     const mode = (args.mode as RestoreMode) || 'upsert';
-    const activate = Boolean(args.activate);
+    const activateOnUpdate =
+      Boolean(args.activate) || !Boolean(args['no-activate-on-update']);
     const parsed = YAML.parse(raw) as BackupFile | BackupTreeFile;
     if (!parsed || typeof parsed !== 'object') {
       throw new Error('Invalid backup file format');
@@ -392,6 +680,7 @@ export async function run(): Promise<void> {
     const force = Boolean(args.force);
     const strict = Boolean(args.strict);
     const dangerous = Boolean(args.dangerous);
+    const activateOnCreate = !Boolean(args['no-activate-on-create']);
     const transportRequest =
       typeof args.transport === 'string' ? args.transport : undefined;
     if (transportRequest) {
@@ -415,14 +704,69 @@ export async function run(): Promise<void> {
             `Conflicts found: ${result.summary.conflicts}. Use --force to restore anyway.`,
           );
         }
+        const plan = buildRestorePlan(tree.root, result.entries);
+        const summary = plan.reduce(
+          (acc, item) => {
+            acc[item.action] = (acc[item.action] || 0) + 1;
+            return acc;
+          },
+          {} as Record<string, number>,
+        );
+        logVerbose(
+          1,
+          `Restore plan: create ${summary.create || 0}, update ${summary.update || 0}, skip ${summary.skip || 0}, error ${summary.error || 0}`,
+        );
+        for (const item of plan) {
+          if (item.action === 'skip') {
+            continue;
+          }
+          const spec = getNodeObjectSpec(item.node);
+          const label = spec ? formatObjectSpec(spec) : item.node.name;
+          logVerbose(2, `Plan ${item.action}: ${label} (${item.status})`);
+        }
+        const restoreIds = new Set(
+          plan
+            .filter(
+              (item) => item.action === 'create' || item.action === 'update',
+            )
+            .map((item) => item.id),
+        );
+        const restoreActions = new Map<string, RestoreMode>();
+        for (const item of plan) {
+          if (item.action === 'create') {
+            restoreActions.set(item.id, 'create');
+          } else if (item.action === 'update') {
+            restoreActions.set(item.id, 'update');
+          }
+        }
+        if (restoreIds.size === 0) {
+          console.log('Restore skipped: no changes detected');
+          return;
+        }
+        logVerbose(2, `Restoring tree backup for package ${tree.package}`);
+        await restoreTreeBackup(
+          client,
+          tree.root,
+          mode,
+          activateOnUpdate,
+          transportRequest,
+          restoreIds,
+          restoreActions,
+          activateOnCreate,
+        );
+        console.log('Restore completed');
+        return;
       }
       logVerbose(2, `Restoring tree backup for package ${tree.package}`);
       await restoreTreeBackup(
         client,
         tree.root,
         mode,
-        activate,
+        activateOnUpdate,
         transportRequest,
+        undefined,
+        undefined,
+        activateOnCreate,
       );
       console.log('Restore completed');
       return;
@@ -442,18 +786,86 @@ export async function run(): Promise<void> {
           `Conflicts found: ${result.summary.conflicts}. Use --force to restore anyway.`,
         );
       }
+      const restoreActions = new Map<string, RestoreMode>();
+      for (const entry of result.entries) {
+        if (entry.status === 'missing') {
+          restoreActions.set(`${entry.type}:${entry.name}`, 'create');
+        } else if (
+          entry.status === 'package-mismatch' ||
+          entry.status === 'source-mismatch'
+        ) {
+          restoreActions.set(`${entry.type}:${entry.name}`, 'update');
+        }
+      }
+      if (restoreActions.size === 0) {
+        console.log('Restore skipped: no changes detected');
+        return;
+      }
+      logVerbose(2, `Restoring flat backup (${flat.objects.length} objects)`);
+      await restoreObjects(
+        client,
+        flat.objects,
+        mode,
+        activateOnUpdate,
+        transportRequest,
+        restoreActions,
+        activateOnCreate,
+      );
+      console.log(`Restore completed for ${flat.objects.length} object(s)`);
+      return;
     }
     logVerbose(2, `Restoring flat backup (${flat.objects.length} objects)`);
     await restoreObjects(
       client,
       flat.objects,
       mode,
-      activate,
+      activateOnUpdate,
       transportRequest,
+      undefined,
+      activateOnCreate,
     );
     console.log(`Restore completed for ${flat.objects.length} object(s)`);
     return;
   }
 
   throw new Error(`Unknown command: ${command}`);
+}
+
+function enableLogFile(logFile: string): void {
+  const dir = path.dirname(logFile);
+  if (dir && dir !== '.') {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  const stream = fs.createWriteStream(logFile, { flags: 'a' });
+
+  const writeLine = (args: unknown[]): void => {
+    const line = args.map(formatLogArg).join(' ');
+    stream.write(`${line}\n`);
+  };
+
+  const wrap =
+    (fn: (...args: unknown[]) => void) =>
+    (...args: unknown[]): void => {
+      fn(...args);
+      writeLine(args);
+    };
+
+  console.log = wrap(console.log.bind(console));
+  console.info = wrap(console.info.bind(console));
+  console.warn = wrap(console.warn.bind(console));
+  console.error = wrap(console.error.bind(console));
+}
+
+function formatLogArg(arg: unknown): string {
+  if (arg instanceof Error) {
+    return redactText(arg.stack ?? arg.message);
+  }
+  if (typeof arg === 'string') {
+    return redactText(arg);
+  }
+  try {
+    return safeStringify(arg);
+  } catch {
+    return String(arg);
+  }
 }

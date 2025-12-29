@@ -10,13 +10,21 @@ function formatTreeNodeLabel(node: BackupTreeNode): string {
   return node.name;
 }
 
-export function formatTreeListText(node: BackupTreeNode, depth = 0): string[] {
+export function formatTreeListText(
+  node: BackupTreeNode,
+  depth = 0,
+  options?: { showDeps?: boolean },
+): string[] {
   const lines: string[] = [];
   const indent = '  '.repeat(depth);
-  lines.push(`${indent}${formatTreeNodeLabel(node)}`);
+  const depsSuffix =
+    options?.showDeps && node.usedBy && node.usedBy.length > 0
+      ? ` usedBy=[${node.usedBy.join(', ')}]`
+      : '';
+  lines.push(`${indent}${formatTreeNodeLabel(node)}${depsSuffix}`);
   if (node.children && node.children.length > 0) {
     for (const child of node.children) {
-      lines.push(...formatTreeListText(child, depth + 1));
+      lines.push(...formatTreeListText(child, depth + 1, options));
     }
   }
   return lines;

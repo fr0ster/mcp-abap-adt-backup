@@ -54,6 +54,7 @@ export interface BackupTreeNode {
   codeBase64?: string;
   codeFormat?: 'source' | 'xml' | 'json';
   codeChecksum?: string;
+  usedBy?: string[];
   restoreStatus?: 'ok' | 'not-implemented';
   config?: BackupConfig;
   functionGroupName?: string;

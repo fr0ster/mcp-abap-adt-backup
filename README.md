@@ -26,8 +26,15 @@ adt-backup backup --package ZPKG_TEST --output backup.yaml --destination TRIAL
 # Lightweight tree without payloads
 adt-backup tree --package ZPKG_TEST --output tree.yaml --destination TRIAL
 
-# Restore
-adt-backup restore --input backup.yaml --mode upsert --activate --destination TRIAL
+# Verify (source-only by default)
+adt-backup verify --input backup.yaml --destination TRIAL
+
+# Diff (all objects)
+adt-backup diff --input backup.yaml --all --destination TRIAL
+
+# Restore (new objects and updates activate by default)
+adt-backup restore --input backup.yaml --mode upsert --destination TRIAL
+Use `--no-activate-on-create` or `--no-activate-on-update` to skip activation for the respective phases.
 
 # Extract / patch a single object payload
 adt-backup extract --input backup.yaml --object class:ZCL_TEST --out ZCL_TEST.abap
@@ -36,7 +43,7 @@ adt-backup patch --input backup.yaml --object class:ZCL_TEST --file ZCL_TEST.aba
 
 ## Logging
 
-Use `-vv` for main stages and `-vvv` for per-object details.
+Use `-v` for main stages, `-vv` for per-object details, and `-vvv` for ADT/connection debug logs.
 
 ## Roadmap
 

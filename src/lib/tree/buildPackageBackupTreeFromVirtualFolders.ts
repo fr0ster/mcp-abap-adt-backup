@@ -1,5 +1,6 @@
 import type { AdtClient } from '@mcp-abap-adt/adt-clients';
 import { logVerbose } from '../cli/logVerbose';
+import { collectTreeDependencies } from '../dependencies/collectTreeDependencies';
 import type { BackupTreeFile, BackupTreeNode } from '../types';
 import { enrichTreeNode } from './enrichTreeNode';
 
@@ -21,6 +22,11 @@ export async function buildPackageBackupTreeFromVirtualFolders(
   logVerbose(2, `Building node tree for ${packageNameUpper}`);
   const enrichedRoot = await enrichTreeNode(rootTree, client, includeCode);
   const finalRoot = enrichedRoot;
+
+  if (includeCode) {
+    logVerbose(2, `Collecting where-used dependencies for ${packageNameUpper}`);
+    await collectTreeDependencies(client, finalRoot);
+  }
 
   return {
     schemaVersion: 2,

@@ -8,24 +8,50 @@ export async function restoreObjects(
   client: AdtClient,
   objects: BackupObject[],
   mode: RestoreMode,
-  activate: boolean,
+  activateOnUpdate: boolean,
   transportRequest?: string,
+  restoreActions?: Map<string, RestoreMode>,
+  activateOnCreate = true,
 ): Promise<void> {
   const ordered = sortByDependencies(objects);
   logVerbose(
     2,
-    `Restoring ${ordered.length} object(s) in flat mode (mode=${mode}, activate=${activate})`,
+    `Restoring ${ordered.length} object(s) in flat mode (mode=${mode}, activate=${activateOnUpdate})`,
   );
   for (const obj of ordered) {
     logVerbose(3, `Restore ${obj.type}:${obj.name}`);
-    if (mode === 'upsert') {
+    const nodeMode =
+      mode === 'upsert' && restoreActions?.has(obj.id)
+        ? restoreActions.get(obj.id)
+        : mode;
+    const effectiveActivate =
+      nodeMode === 'create' ? activateOnCreate : activateOnUpdate;
+    if (nodeMode === 'upsert') {
       try {
-        await restoreObject(client, obj, 'create', activate, transportRequest);
+        await restoreObject(
+          client,
+          obj,
+          'create',
+          effectiveActivate,
+          transportRequest,
+        );
       } catch (_error) {
-        await restoreObject(client, obj, 'update', activate, transportRequest);
+        await restoreObject(
+          client,
+          obj,
+          'update',
+          effectiveActivate,
+          transportRequest,
+        );
       }
     } else {
-      await restoreObject(client, obj, mode, activate, transportRequest);
+      await restoreObject(
+        client,
+        obj,
+        nodeMode || mode,
+        effectiveActivate,
+        transportRequest,
+      );
     }
   }
 }
