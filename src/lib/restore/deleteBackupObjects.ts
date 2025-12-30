@@ -12,7 +12,19 @@ export async function deleteBackupObjects(
     return;
   }
 
-  await client.getUtils().checkDeletionGroup(targets);
+  const checkResponse = await client.getUtils().checkDeletionGroup(targets);
+  const messages = checkResponse.data?.messages || [];
+  const errors = messages.filter(
+    (m: any) => m.severity === 'error' || m.severity === 'E',
+  );
+
+  if (errors.length > 0) {
+    const errorList = errors
+      .map((e: any) => `${e.objName}: ${e.text}`)
+      .join('\n');
+    throw new Error(`Deletion check failed before cleanup:\n${errorList}`);
+  }
+
   await client
     .getUtils()
     .deleteObjectsGroup(targets, transportRequest?.trim() || undefined);

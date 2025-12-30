@@ -115,12 +115,27 @@ Using Transport Request: ${transportRequest}`);
     }
 
     console.log('Checking deletion...');
-    // Optional: Check deletion first
-    try {
-      await client.getUtils().checkDeletionGroup(objectsToDelete);
+    const checkResponse = await client.getUtils().checkDeletionGroup(objectsToDelete);
+    const messages = checkResponse.data?.messages || [];
+    const errors = messages.filter((m: any) => m.severity === 'error' || m.severity === 'E');
+
+    if (errors.length > 0) {
+      console.error('\nCANNOT DELETE: Deletion check failed with errors:');
+      errors.forEach((e: any) => console.error(` - [${e.objName}] ${e.text}`));
+      process.exit(1);
+    }
+    
+    const warnings = messages.filter((m: any) => m.severity === 'warning' || m.severity === 'W');
+    if (warnings.length > 0) {
+      console.warn('\nCheck warnings:');
+      warnings.forEach((w: any) => console.warn(` - [${w.objName}] ${w.text}`));
+      const proceed = await confirm('Proceed despite warnings?');
+      if (!proceed) {
+        console.log('Aborted.');
+        process.exit(0);
+      }
+    } else {
       console.log('Check passed.');
-    } catch (error: any) {
-       console.warn('Check warning:', error.message);
     }
 
     console.log('Deleting objects sequentially...');
