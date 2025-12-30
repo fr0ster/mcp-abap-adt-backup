@@ -15,9 +15,17 @@ type AxiosLikeError = {
 };
 
 function getHttpStatus(error: unknown): number | undefined {
-  const axiosError = error as AxiosLikeError | undefined;
-  if (axiosError && axiosError.isAxiosError) {
-    return axiosError.response?.status;
+  const err = error as any;
+  if (err.response?.status) {
+    return err.response.status;
+  }
+  if (err.status) {
+    return err.status;
+  }
+  // Check if it's a "Request failed with status code 404" style message
+  const match = String(err.message || '').match(/status code (\d+)/);
+  if (match) {
+    return Number.parseInt(match[1], 10);
   }
   return undefined;
 }
@@ -48,6 +56,9 @@ export async function verifyObjectInSystem(
     );
   } catch (error) {
     const status = getHttpStatus(error);
+    // 404/410 = Not Found. 
+    // In some ABAP Cloud systems, trying to access a non-existent deep URI might return 401 or 403 
+    // if the resource is completely hidden. But usually 404 is standard.
     if (status === 404 || status === 410) {
       if (verbosityState.level >= 3) {
         const otherType = await findOtherType(client, spec.type, spec.name);
@@ -62,9 +73,23 @@ export async function verifyObjectInSystem(
       return {
         ...base,
         status: 'missing',
-        message: error instanceof Error ? error.message : String(error),
+        message: 'Object does not exist in the system',
       };
     }
+    
+    // If it's a package, and we failed to read metadata, let's try a simpler check
+    if (spec.type === 'package') {
+        try {
+            await client.getUtils().getPackageContents(spec.name);
+            // If this succeeds, the package exists but metadata read failed for some reason
+        } catch (innerError) {
+            const innerStatus = getHttpStatus(innerError);
+            if (innerStatus === 404) {
+                return { ...base, status: 'missing', message: 'Package not found' };
+            }
+        }
+    }
+
     return {
       ...base,
       status: 'error',
