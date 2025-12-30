@@ -140,6 +140,7 @@ export async function collectTreeDependencies(
       });
       const xml = responseToText(response);
       if (!xml) {
+        logVerbose(3, `  Where-used response empty for ${objectName}`);
         continue;
       }
       const parsed = parseWhereUsedXml(xml);
@@ -147,16 +148,34 @@ export async function collectTreeDependencies(
         (entry) => entry.context === 'referencing',
       );
       const entries = referencing.length > 0 ? referencing : parsed;
+
+      logVerbose(
+        3,
+        `  Raw references found for ${objectName}: ${entries.length}`,
+      );
+
       const usedBy = new Set<string>();
       for (const entry of entries) {
         const usedSpec = mapWhereUsedSpec(entry);
         if (!usedSpec) {
+          logVerbose(
+            4,
+            `    Skip: unknown type/name for ${entry.type}:${entry.name}`,
+          );
           continue;
         }
         if (usedSpec.id === objectId(spec)) {
           continue;
         }
         if (!nodeById.has(usedSpec.id)) {
+          logVerbose(
+            4,
+            `    Skip: object not in backup tree ${usedSpec.id} (found matches: ${Array.from(
+              nodeById.keys(),
+            )
+              .filter((k) => k.includes(usedSpec.name))
+              .join(', ')})`,
+          );
           continue;
         }
         usedBy.add(
@@ -169,11 +188,21 @@ export async function collectTreeDependencies(
       }
       if (usedBy.size > 0) {
         node.usedBy = Array.from(usedBy).sort();
+        logVerbose(
+          2,
+          `  Dependencies collected for ${objectName}: ${node.usedBy.join(', ')}`,
+        );
+      } else {
+        logVerbose(
+          3,
+          `  No internal dependencies found for ${objectName} (after filtering)`,
+        );
       }
+    } catch (error: any) {
       logVerbose(
-        3,
-        `Dependencies: ${formatObjectSpec(spec)} -> ${usedBy.size}`,
+        2,
+        `  Error getting dependencies for ${objectName}: ${error.message}`,
       );
-    } catch (_error) {}
+    }
   }
 }
