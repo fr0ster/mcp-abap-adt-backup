@@ -41,7 +41,8 @@
     "build": "npm run --silent clean && npx biome check src --diagnostic-level=error && npx tsc -p tsconfig.json",
     "build:fast": "npx tsc -p tsconfig.json",
     "test:integration": "node scripts/integration-test.mjs",
-    "delete:package": "npx ts-node scripts/delete-package.ts"
+    "delete:package": "npx ts-node scripts/delete-package.ts",
+    "debug:deps": "npx ts-node scripts/debug-dependencies.ts"
   },
   "engines": {
     "node": ">=18.0.0"
