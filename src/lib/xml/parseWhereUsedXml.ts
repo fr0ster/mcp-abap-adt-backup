@@ -8,8 +8,14 @@ export type WhereUsedEntry = {
   context?: 'referencing' | 'referenced' | 'unknown';
 };
 
-const NAME_KEYS = ['@_name', '@_objectName', '@_object_name'];
-const TYPE_KEYS = ['@_type', '@_objectType', '@_object_type', '@_adtType'];
+const NAME_KEYS = ['@_name', '@_objectName', '@_object_name', '@_adtcore:name'];
+const TYPE_KEYS = [
+  '@_type',
+  '@_objectType',
+  '@_object_type',
+  '@_adtType',
+  '@_adtcore:type',
+];
 const PARENT_KEYS = ['@_parentName', '@_parent_name', '@_parent'];
 
 function getAttr(record: NodeRecord, keys: string[]): string | undefined {
