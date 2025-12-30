@@ -13,17 +13,21 @@ import { parseWhereUsedXml } from '../xml/parseWhereUsedXml';
 type WhereUsedSpec = ObjectSpec & { id: string };
 
 const WHERE_USED_TYPE_MAP: Partial<Record<SupportedType, string>> = {
-  package: 'package',
-  domain: 'domain',
-  dataElement: 'dataelement',
-  structure: 'structure',
-  table: 'table',
-  view: 'view',
-  class: 'class',
-  interface: 'interface',
-  program: 'program',
-  functionGroup: 'functiongroup',
-  functionModule: 'functionmodule',
+  package: 'DEVC/K',
+  domain: 'DOMA/DD',
+  dataElement: 'DTEL/DE',
+  structure: 'STRU/DT',
+  table: 'TABL/DT',
+  view: 'DDLS/DF',
+  class: 'CLAS/OC',
+  interface: 'INTF/IF',
+  program: 'PROG/P',
+  functionGroup: 'FUGR/F',
+  functionModule: 'FUGR/FF',
+  serviceDefinition: 'SRVD/SRV',
+  metadataExtension: 'DDLX/EX',
+  behaviorDefinition: 'BDEF/BDO',
+  behaviorImplementation: 'BIMP/BIM',
 };
 
 function parseFunctionModuleName(
