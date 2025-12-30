@@ -13,7 +13,6 @@ export * from './isNodeObject';
 export * from './parseDataElementConfig';
 export * from './parseDomainConfig';
 export * from './parsePackageConfig';
-export * from './parseWhereUsedXml';
 export * from './readAttr';
 export * from './toBoolean';
 export * from './toNumber';
