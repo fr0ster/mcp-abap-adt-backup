@@ -92,6 +92,7 @@ export async function restoreTreeBackup(
 
   if (activationList.length > 0) {
     logVerbose(2, `Activating ${activationList.length} object(s)...`);
-    await client.getUtils().activateObjectsGroup(activationList);
+    // Pass true for preauditRequested to check before activating
+    await client.getUtils().activateObjectsGroup(activationList, true);
   }
 }
