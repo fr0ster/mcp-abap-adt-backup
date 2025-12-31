@@ -18,6 +18,7 @@ import type {
   ITableTypeConfig,
   IViewConfig,
 } from '@mcp-abap-adt/adt-clients';
+import { logVerbose } from '../cli/logVerbose';
 import { decodeBase64 } from '../crypto/decodeBase64';
 import type { BackupTreeNode, RestoreMode } from '../types';
 import { asConfig } from '../utils/asConfig';
@@ -30,6 +31,8 @@ export async function restoreTreeNode(
   mode: RestoreMode,
   activate: boolean,
   transportRequest?: string,
+  softwareComponentOverride?: string,
+  backupPackageNames?: Set<string>,
 ): Promise<void> {
   if (!node.type || node.restoreStatus !== 'ok') {
     return;
@@ -48,11 +51,36 @@ export async function restoreTreeNode(
     switch (node.type) {
       case 'package': {
         const pkgConfig = asConfig<IPackageConfig>(config);
-        // If superPackage is defined, let the softwareComponent be inherited (remove it from config)
-        // to avoid conflicts (e.g. if parent is HOME and child tries to be ZLOCAL)
-        if (pkgConfig.superPackage && pkgConfig.softwareComponent) {
-          delete pkgConfig.softwareComponent;
+
+        // Remove responsible field - let system use current user
+        // (backup might have user that doesn't exist in target system)
+        if (pkgConfig.responsible) {
+          delete pkgConfig.responsible;
         }
+
+        // Check if this package's superPackage is within our backup tree
+        const superPackageInBackup =
+          pkgConfig.superPackage &&
+          backupPackageNames?.has(pkgConfig.superPackage);
+
+        logVerbose(
+          3,
+          `Package ${node.name}: superPackage=${pkgConfig.superPackage}, softwareComponent=${pkgConfig.softwareComponent}, superPackageInBackup=${superPackageInBackup}`,
+        );
+
+        // Set softwareComponent for all packages
+        // Priority: CLI override > config value > default 'ZLOCAL'
+        // For sub-packages, use CLI override to ensure consistency with parent
+        if (softwareComponentOverride) {
+          pkgConfig.softwareComponent = softwareComponentOverride;
+        } else if (!pkgConfig.softwareComponent) {
+          pkgConfig.softwareComponent = 'ZLOCAL';
+        }
+
+        logVerbose(
+          3,
+          `Package ${node.name}: final softwareComponent=${pkgConfig.softwareComponent}`,
+        );
 
         if (mode !== 'update') {
           await client.getPackage().create(pkgConfig, options);

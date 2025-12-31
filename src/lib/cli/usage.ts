@@ -5,7 +5,7 @@ export function usage(): string {
     'Commands:',
     '  backup  --objects <type:name[,type:name]> [--output file] [--destination name] [--env file] [--auth-root path]',
     '  backup  --package <name> [--output file] [--destination name] [--env file] [--auth-root path]',
-    '  restore --input <file> [--mode create|update|upsert] [--activate] [--no-activate-on-create] [--no-activate-on-update] [--force] [--strict] [--dangerous] [--transport <request>] [--destination name] [--env file] [--auth-root path]',
+    '  restore --input <file> [--mode create|update|upsert] [--activate] [--no-activate-on-create] [--no-activate-on-update] [--force] [--strict] [--dangerous] [--transport <request>] [--software-component <name>] [--destination name] [--env file] [--auth-root path]',
     '  diff    --input <file> --object <type:name> [--destination name] [--env file] [--auth-root path]',
     '  diff    --input <file> --all [--show-ok] [--destination name] [--env file] [--auth-root path]',
     '  verify  --input <file> [--format text|json] [--strict] [--destination name] [--env file] [--auth-root path]',

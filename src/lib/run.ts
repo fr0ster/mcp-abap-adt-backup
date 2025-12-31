@@ -662,8 +662,18 @@ export async function run(): Promise<void> {
     const activateOnCreate = !args['no-activate-on-create'];
     const transportRequest =
       typeof args.transport === 'string' ? args.transport : undefined;
+    const softwareComponent =
+      typeof args['software-component'] === 'string'
+        ? args['software-component']
+        : undefined;
     if (transportRequest) {
       logVerbose(1, `Using transport request for restore: ${transportRequest}`);
+    }
+    if (softwareComponent) {
+      logVerbose(
+        1,
+        `Using software component override for packages: ${softwareComponent}`,
+      );
     }
     if ((parsed as BackupTreeFile).schemaVersion === 2) {
       const tree = parsed as BackupTreeFile;
@@ -732,6 +742,7 @@ export async function run(): Promise<void> {
           restoreIds,
           restoreActions,
           activateOnCreate,
+          softwareComponent,
         );
         console.log('Restore completed');
         return;
@@ -746,6 +757,7 @@ export async function run(): Promise<void> {
         undefined,
         undefined,
         activateOnCreate,
+        softwareComponent,
       );
       console.log('Restore completed');
       return;

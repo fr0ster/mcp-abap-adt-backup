@@ -16,6 +16,7 @@ export async function restoreTreeBackup(
   restoreIds?: Set<string>,
   restoreActions?: Map<string, RestoreMode>,
   activateOnCreate = true,
+  softwareComponent?: string,
 ): Promise<void> {
   const allNodes = flattenTree(root).filter(
     (node) => node.type && node.restoreStatus === 'ok',
@@ -48,6 +49,9 @@ export async function restoreTreeBackup(
   // Packages first (in tree order), then sorted non-packages
   const orderedNodes = [...packageNodes, ...sortedNonPackages];
 
+  // Collect package names from backup tree for inheritance logic
+  const backupPackageNames = new Set(packageNodes.map((node) => node.name));
+
   logVerbose(
     2,
     `Restoring ${orderedNodes.length} node(s) from tree (mode=${mode}, activate=${activate})`,
@@ -79,6 +83,8 @@ export async function restoreTreeBackup(
           'create',
           effectiveActivate,
           transportRequest,
+          softwareComponent,
+          backupPackageNames,
         );
       } catch (_error) {
         await restoreTreeNode(
@@ -87,6 +93,8 @@ export async function restoreTreeBackup(
           'update',
           effectiveActivate,
           transportRequest,
+          softwareComponent,
+          backupPackageNames,
         );
       }
     } else {
@@ -96,6 +104,8 @@ export async function restoreTreeBackup(
         nodeMode || mode,
         effectiveActivate,
         transportRequest,
+        softwareComponent,
+        backupPackageNames,
       );
     }
 
