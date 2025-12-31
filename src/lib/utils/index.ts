@@ -1,5 +1,4 @@
 export * from './applyConfigName';
-export * from './asArray';
 export * from './asConfig';
 export * from './ensureDescription';
 export * from './formatObjectSpec';
