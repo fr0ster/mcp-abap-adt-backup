@@ -1,6 +1,6 @@
 {
   "name": "@mcp-abap-adt/adt-backup",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "ADT backup CLI for SAP ABAP objects (recursive package backups and restores)",
   "main": "dist/bin/adt-backup.js",
   "types": "dist/bin/adt-backup.d.ts",
