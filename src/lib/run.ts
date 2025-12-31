@@ -68,8 +68,19 @@ export async function run(): Promise<void> {
     process.env.DEBUG_CONNECTORS = 'true';
   }
 
-  if (!command || command === '--help' || command === '-h') {
+  const isHelp =
+    args.help ||
+    argv.includes('-h') ||
+    argv.includes('--help') ||
+    command === 'help';
+  if (!command || (isHelp && !argv[1]) || (command === 'help' && !argv[1])) {
     console.log(usage());
+    process.exit(0);
+  }
+
+  if (isHelp) {
+    const helpCommand = command === 'help' ? argv[1] : command;
+    console.log(usage(helpCommand));
     process.exit(0);
   }
 
