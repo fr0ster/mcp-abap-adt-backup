@@ -28,7 +28,7 @@ All notable changes to this project will be documented in this file.
         - Metadata Extension
         - Behavior Definition
 - **Authentication:** Integration with `@mcp-abap-adt/auth-broker` for secure connection management.
-- **CLI:** Robust command-line interface with logging levels (`-v`, `-vv`, `-vvv`).
+- **CLI:** Robust command-line interface with logging levels (`-v`, `-vv`, `-vvv`) and command-specific help (e.g., `adt-backup restore --help`).
 
 ### Changed
 - **Dependencies:** Improved dependency collection and handling using native ADT "Where-Used" list.

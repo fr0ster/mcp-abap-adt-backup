@@ -38,6 +38,19 @@ adt-backup extract --input backup.yaml --object class:ZCL_TEST --out ZCL_TEST.ab
 adt-backup patch --input backup.yaml --object class:ZCL_TEST --file ZCL_TEST.abap
 ```
 
+## Help
+
+Get general help or command-specific usage information:
+
+```bash
+# General help
+adt-backup --help
+
+# Command-specific help
+adt-backup restore --help
+adt-backup diff --help
+```
+
 ## Logging
 
 Use `-v` for main stages, `-vv` for per-object details, and `-vvv` for ADT/connection debug logs.
