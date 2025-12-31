@@ -11,11 +11,12 @@ import type { VerifyEntry } from './types';
 type AxiosLikeError = {
   isAxiosError?: boolean;
   response?: { status?: number };
+  status?: number;
   message?: string;
 };
 
 function getHttpStatus(error: unknown): number | undefined {
-  const err = error as any;
+  const err = error as AxiosLikeError;
   if (err.response?.status) {
     return err.response.status;
   }

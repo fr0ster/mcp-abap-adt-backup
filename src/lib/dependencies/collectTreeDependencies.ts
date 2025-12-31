@@ -126,10 +126,12 @@ export async function collectTreeDependencies(
           `  No internal dependencies found for ${objectName} (after filtering)`,
         );
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       logVerbose(
         2,
-        `  Error getting dependencies for ${objectName}: ${error.message}`,
+        `Warning: failed to collect dependencies for ${node.adtType}:${
+          node.name
+        }: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }

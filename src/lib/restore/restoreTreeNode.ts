@@ -343,13 +343,17 @@ export async function restoreTreeNode(
         return;
       }
     }
-  } catch (error: any) {
-    if (error.response?.data) {
+  } catch (error: unknown) {
+    const err = error as {
+      message?: string;
+      response?: { data?: unknown };
+    };
+    if (err.response?.data) {
       console.error(
         `Error restoring ${node.type}:${node.name}:`,
-        typeof error.response.data === 'string'
-          ? error.response.data
-          : JSON.stringify(error.response.data, null, 2),
+        typeof err.response.data === 'string'
+          ? err.response.data
+          : JSON.stringify(err.response.data, null, 2),
       );
     }
     throw error;

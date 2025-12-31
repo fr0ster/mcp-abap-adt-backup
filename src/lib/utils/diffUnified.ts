@@ -77,8 +77,8 @@ function backtrackEdits(
 }
 
 function buildUnifiedHunks(
-  oldLines: string[],
-  newLines: string[],
+  _oldLines: string[],
+  _newLines: string[],
   edits: DiffEdit[],
   context: number,
 ): string[] {
