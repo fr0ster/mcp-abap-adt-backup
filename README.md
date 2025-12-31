@@ -23,9 +23,6 @@ Options:
 # Package backup (recursive)
 adt-backup backup --package ZPKG_TEST --output backup.yaml --destination TRIAL
 
-# Lightweight tree without payloads
-adt-backup tree --package ZPKG_TEST --output tree.yaml --destination TRIAL
-
 # Verify (source-only by default)
 adt-backup verify --input backup.yaml --destination TRIAL
 
