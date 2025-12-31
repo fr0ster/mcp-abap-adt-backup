@@ -17,4 +17,5 @@ export const typeOrder: SupportedType[] = [
   'metadataExtension',
   'behaviorDefinition',
   'behaviorImplementation',
+  'enhancement',
 ];

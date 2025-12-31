@@ -17,30 +17,44 @@ export async function restoreTreeBackup(
   restoreActions?: Map<string, RestoreMode>,
   activateOnCreate = true,
 ): Promise<void> {
-  const nodes = flattenTree(root).filter(
+  const allNodes = flattenTree(root).filter(
     (node) => node.type && node.restoreStatus === 'ok',
   );
-  const filteredNodes = restoreIds
-    ? nodes.filter((node) => {
+  const nodes = restoreIds
+    ? allNodes.filter((node) => {
         const id = getNodeObjectId(node);
         return id ? restoreIds.has(id) : false;
       })
-    : nodes;
+    : allNodes;
+
+  // Separate packages from non-packages
+  // Packages keep their tree order (parent before children)
+  const packageNodes = nodes.filter((node) => node.type === 'package');
+  const nonPackageNodes = nodes.filter((node) => node.type !== 'package');
+
+  // Sort non-packages by dependencies or typeOrder
   const priority = new Map(typeOrder.map((type, index) => [type, index]));
-  const hasDependencies = filteredNodes.some(
+  const hasDependencies = nonPackageNodes.some(
     (node) => Array.isArray(node.usedBy) && node.usedBy.length > 0,
   );
-  const orderedNodes = hasDependencies
-    ? sortTreeNodesByDependencies(filteredNodes)
-    : filteredNodes.sort((a, b) => {
+  const sortedNonPackages = hasDependencies
+    ? sortTreeNodesByDependencies(nonPackageNodes)
+    : nonPackageNodes.sort((a, b) => {
         const aOrder = a.type ? (priority.get(a.type) ?? 999) : 999;
         const bOrder = b.type ? (priority.get(b.type) ?? 999) : 999;
         return aOrder - bOrder || a.name.localeCompare(b.name);
       });
 
+  // Packages first (in tree order), then sorted non-packages
+  const orderedNodes = [...packageNodes, ...sortedNonPackages];
+
   logVerbose(
     2,
     `Restoring ${orderedNodes.length} node(s) from tree (mode=${mode}, activate=${activate})`,
+  );
+  logVerbose(
+    2,
+    `  Packages: ${packageNodes.length}, Other objects: ${sortedNonPackages.length}`,
   );
 
   const activationList: ObjectReference[] = [];

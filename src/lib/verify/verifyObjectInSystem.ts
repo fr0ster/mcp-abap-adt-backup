@@ -56,10 +56,14 @@ export async function verifyObjectInSystem(
     );
   } catch (error) {
     const status = getHttpStatus(error);
-    // 404/410 = Not Found. 
-    // In some ABAP Cloud systems, trying to access a non-existent deep URI might return 401 or 403 
-    // if the resource is completely hidden. But usually 404 is standard.
-    if (status === 404 || status === 410) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    // Check if error message explicitly says "not found"
+    // Examples: "Domain 'XYZ' not found", "Function group 'ABC' not found"
+    const isNotFoundMessage =
+      /not found/i.test(message) || /does not exist/i.test(message);
+
+    if (status === 404 || status === 410 || isNotFoundMessage) {
       if (verbosityState.level >= 3) {
         const otherType = await findOtherType(client, spec.type, spec.name);
         if (otherType) {
@@ -73,21 +77,23 @@ export async function verifyObjectInSystem(
       return {
         ...base,
         status: 'missing',
-        message: 'Object does not exist in the system',
+        message: isNotFoundMessage
+          ? message
+          : 'Object does not exist in the system',
       };
     }
-    
+
     // If it's a package, and we failed to read metadata, let's try a simpler check
     if (spec.type === 'package') {
-        try {
-            await client.getUtils().getPackageContents(spec.name);
-            // If this succeeds, the package exists but metadata read failed for some reason
-        } catch (innerError) {
-            const innerStatus = getHttpStatus(innerError);
-            if (innerStatus === 404) {
-                return { ...base, status: 'missing', message: 'Package not found' };
-            }
+      try {
+        await client.getUtils().getPackageContents(spec.name);
+        // If this succeeds, the package exists but metadata read failed for some reason
+      } catch (innerError) {
+        const innerStatus = getHttpStatus(innerError);
+        if (innerStatus === 404) {
+          return { ...base, status: 'missing', message: 'Package not found' };
         }
+      }
     }
 
     return {

@@ -5,6 +5,7 @@ import type {
   IClassConfig,
   IDataElementConfig,
   IDomainConfig,
+  IEnhancementConfig,
   IFunctionGroupConfig,
   IFunctionModuleConfig,
   IInterfaceConfig,
@@ -14,6 +15,7 @@ import type {
   IServiceDefinitionConfig,
   IStructureConfig,
   ITableConfig,
+  ITableTypeConfig,
   IViewConfig,
 } from '@mcp-abap-adt/adt-clients';
 import { decodeBase64 } from '../crypto/decodeBase64';
@@ -279,6 +281,36 @@ export async function restoreTreeNode(
             }),
             options,
           );
+        }
+        return;
+      }
+      case 'enhancement': {
+        if (mode !== 'update') {
+          await client
+            .getEnhancement()
+            .create(asConfig<IEnhancementConfig>(config), options);
+        }
+        if (payload) {
+          await client.getEnhancement().update(
+            asConfig<IEnhancementConfig>({
+              ...config,
+              sourceCode: payload,
+            }),
+            options,
+          );
+        }
+        return;
+      }
+      case 'tableType': {
+        if (mode !== 'update') {
+          await client
+            .getTableType()
+            .create(asConfig<ITableTypeConfig>(config), options);
+        }
+        if (mode !== 'create') {
+          await client
+            .getTableType()
+            .update(asConfig<ITableTypeConfig>(config), options);
         }
         return;
       }

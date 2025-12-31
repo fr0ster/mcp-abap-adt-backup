@@ -18,6 +18,7 @@ export function isRestoreImplemented(type?: SupportedType): boolean {
     case 'metadataExtension':
     case 'behaviorDefinition':
     case 'behaviorImplementation':
+    case 'enhancement':
       return true;
     default:
       return false;

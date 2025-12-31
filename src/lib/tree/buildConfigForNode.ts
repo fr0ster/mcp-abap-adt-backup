@@ -2,9 +2,13 @@ import type { BackupConfig, SupportedType } from '../types';
 import { applyConfigName } from '../utils/applyConfigName';
 import { toBackupConfig } from '../utils/toBackupConfig';
 import { extractMetadata } from '../xml/extractMetadata';
+import { parseBehaviorDefinitionConfig } from '../xml/parseBehaviorDefinitionConfig';
+import { parseClassConfig } from '../xml/parseClassConfig';
 import { parseDataElementConfig } from '../xml/parseDataElementConfig';
 import { parseDomainConfig } from '../xml/parseDomainConfig';
+import { parseEnhancementConfig } from '../xml/parseEnhancementConfig';
 import { parsePackageConfig } from '../xml/parsePackageConfig';
+import { parseTableTypeConfig } from '../xml/parseTableTypeConfig';
 
 export async function buildConfigForNode(
   type: SupportedType,
@@ -88,6 +92,54 @@ export async function buildConfigForNode(
         packageName,
         description,
       } as BackupConfig);
+    }
+    case 'class': {
+      if (!metadataXml) {
+        return applyConfigName(type, name, functionGroupName, {});
+      }
+      const config = parseClassConfig(metadataXml);
+      return applyConfigName(
+        type,
+        name,
+        functionGroupName,
+        toBackupConfig(config),
+      );
+    }
+    case 'behaviorDefinition': {
+      if (!metadataXml) {
+        return applyConfigName(type, name, functionGroupName, {});
+      }
+      const config = parseBehaviorDefinitionConfig(metadataXml);
+      return applyConfigName(
+        type,
+        name,
+        functionGroupName,
+        toBackupConfig(config),
+      );
+    }
+    case 'enhancement': {
+      if (!metadataXml) {
+        return applyConfigName(type, name, functionGroupName, {});
+      }
+      const config = parseEnhancementConfig(metadataXml);
+      return applyConfigName(
+        type,
+        name,
+        functionGroupName,
+        toBackupConfig(config),
+      );
+    }
+    case 'tableType': {
+      if (!metadataXml) {
+        return applyConfigName(type, name, functionGroupName, {});
+      }
+      const config = parseTableTypeConfig(metadataXml);
+      return applyConfigName(
+        type,
+        name,
+        functionGroupName,
+        toBackupConfig(config),
+      );
     }
     default: {
       if (!metadataXml) {

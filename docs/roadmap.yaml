@@ -33,12 +33,9 @@ objectTypes:
   tableType:
     backup:
       status: implemented
-      payload: source
+      payload: metadata-xml
     restore:
-      status: not-implemented
-      plan:
-        - "Parse table type metadata to capture row_type_name and type_name."
-        - "Restore via AdtClient.getTableType().update() using XML-based config."
+      status: implemented
   view:
     backup:
       status: implemented
@@ -92,27 +89,19 @@ objectTypes:
       status: implemented
       payload: source
     restore:
-      status: not-implemented
-      plan:
-        - "Extract implementationType and template fields from metadata."
-        - "Create behavior definition via AdtClient.getBehaviorDefinition().create()."
-        - "Apply source update after creation."
+      status: implemented
   behaviorImplementation:
     backup:
       status: implemented
       payload: source
     restore:
-      status: not-implemented
-      plan:
-        - "Create behavior implementation class and update source sections."
+      status: implemented
   enhancement:
     backup:
       status: implemented
       payload: source
     restore:
-      status: not-implemented
-      plan:
-        - "Wire create/update through AdtClient enhancement APIs."
+      status: implemented
   unitTest:
     backup:
       status: not-implemented

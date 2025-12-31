@@ -5,6 +5,7 @@ import type {
   IClassConfig,
   IDataElementConfig,
   IDomainConfig,
+  IEnhancementConfig,
   IFunctionGroupConfig,
   IFunctionModuleConfig,
   IInterfaceConfig,
@@ -14,6 +15,7 @@ import type {
   IServiceDefinitionConfig,
   IStructureConfig,
   ITableConfig,
+  ITableTypeConfig,
   IViewConfig,
 } from '@mcp-abap-adt/adt-clients';
 import type { BackupObject, RestoreMode } from '../types';
@@ -274,6 +276,36 @@ export async function restoreObject(
           }),
           options,
         );
+      }
+      return;
+    }
+    case 'enhancement': {
+      if (mode !== 'update') {
+        await client
+          .getEnhancement()
+          .create(asConfig<IEnhancementConfig>(config), options);
+      }
+      if (obj.source) {
+        await client.getEnhancement().update(
+          asConfig<IEnhancementConfig>({
+            ...config,
+            sourceCode: obj.source,
+          }),
+          options,
+        );
+      }
+      return;
+    }
+    case 'tableType': {
+      if (mode !== 'update') {
+        await client
+          .getTableType()
+          .create(asConfig<ITableTypeConfig>(config), options);
+      }
+      if (mode !== 'create') {
+        await client
+          .getTableType()
+          .update(asConfig<ITableTypeConfig>(config), options);
       }
       return;
     }
