@@ -45,15 +45,18 @@ export async function restoreTreeNode(
   try {
     switch (node.type) {
       case 'package': {
+        const pkgConfig = asConfig<IPackageConfig>(config);
+        // If superPackage is defined, let the softwareComponent be inherited (remove it from config)
+        // to avoid conflicts (e.g. if parent is HOME and child tries to be ZLOCAL)
+        if (pkgConfig.superPackage && pkgConfig.softwareComponent) {
+          delete pkgConfig.softwareComponent;
+        }
+
         if (mode !== 'update') {
-          await client
-            .getPackage()
-            .create(asConfig<IPackageConfig>(config), options);
+          await client.getPackage().create(pkgConfig, options);
         }
         if (mode !== 'create') {
-          await client
-            .getPackage()
-            .update(asConfig<IPackageConfig>(config), options);
+          await client.getPackage().update(pkgConfig, options);
         }
         return;
       }
