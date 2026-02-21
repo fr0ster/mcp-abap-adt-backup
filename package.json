@@ -48,13 +48,13 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@mcp-abap-adt/adt-clients": "0.3.14",
+    "@mcp-abap-adt/adt-clients": "0.3.22",
     "@mcp-abap-adt/auth-broker": "^1.0.5",
     "@mcp-abap-adt/auth-providers": "^1.0.5",
     "@mcp-abap-adt/auth-stores": "^1.0.2",
-    "@mcp-abap-adt/connection": "^1.0.1",
-    "fast-xml-parser": "^5.3.3",
-    "yaml": "^2.3.4"
+    "@mcp-abap-adt/connection": "^1.1.0",
+    "fast-xml-parser": "^5.3.7",
+    "yaml": "^2.8.2"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.10",
