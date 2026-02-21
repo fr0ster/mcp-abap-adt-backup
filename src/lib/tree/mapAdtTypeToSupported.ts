@@ -29,6 +29,7 @@ export function mapAdtTypeToSupported(
     'FUGR/F': 'functionGroup',
     FUGR: 'functionGroup',
     'SRVD/SRV': 'serviceDefinition',
+    'SRVB/SVB': 'serviceBinding',
     'BDEF/BDO': 'behaviorDefinition',
     'BIMP/BIM': 'behaviorImplementation',
     'BIMP/BI': 'behaviorImplementation',
@@ -47,6 +48,7 @@ export function mapAdtTypeToSupported(
   if (normalized.startsWith('DDLS/')) return 'view';
   if (normalized.startsWith('DDLX/')) return 'metadataExtension';
   if (normalized.startsWith('SRVD/')) return 'serviceDefinition';
+  if (normalized.startsWith('SRVB/')) return 'serviceBinding';
   if (normalized.startsWith('DOMA/')) return 'domain';
   if (normalized.startsWith('DTEL/')) return 'dataElement';
   if (normalized.startsWith('TABL/DS') || normalized.startsWith('STRU/'))

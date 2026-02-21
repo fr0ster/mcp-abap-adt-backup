@@ -20,6 +20,7 @@ const WHERE_USED_TYPE_MAP: Partial<Record<SupportedType, string>> = {
   functionGroup: 'FUGR/F',
   functionModule: 'FUGR/FF',
   serviceDefinition: 'SRVD/SRV',
+  serviceBinding: 'SRVB/SVB',
   metadataExtension: 'DDLX/EX',
   behaviorDefinition: 'BDEF/BDO',
   behaviorImplementation: 'BIMP/BIM',

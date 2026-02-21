@@ -78,6 +78,12 @@ objectTypes:
       payload: source
     restore:
       status: implemented
+  serviceBinding:
+    backup:
+      status: implemented
+      payload: metadata-xml
+    restore:
+      status: implemented
   metadataExtension:
     backup:
       status: implemented

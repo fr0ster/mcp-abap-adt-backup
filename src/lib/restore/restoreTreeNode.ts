@@ -12,6 +12,7 @@ import type {
   IMetadataExtensionConfig,
   IPackageConfig,
   IProgramConfig,
+  IServiceBindingConfig,
   IServiceDefinitionConfig,
   IStructureConfig,
   ITableConfig,
@@ -258,6 +259,19 @@ export async function restoreTreeNode(
             }),
             options,
           );
+        }
+        return;
+      }
+      case 'serviceBinding': {
+        if (mode !== 'update') {
+          await client
+            .getServiceBinding()
+            .create(asConfig<IServiceBindingConfig>(config), options);
+        }
+        if (mode !== 'create') {
+          await client
+            .getServiceBinding()
+            .update(asConfig<IServiceBindingConfig>(config));
         }
         return;
       }

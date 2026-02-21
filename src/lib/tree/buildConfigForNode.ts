@@ -8,6 +8,7 @@ import { parseDataElementConfig } from '../xml/parseDataElementConfig';
 import { parseDomainConfig } from '../xml/parseDomainConfig';
 import { parseEnhancementConfig } from '../xml/parseEnhancementConfig';
 import { parsePackageConfig } from '../xml/parsePackageConfig';
+import { parseServiceBindingConfig } from '../xml/parseServiceBindingConfig';
 import { parseTableTypeConfig } from '../xml/parseTableTypeConfig';
 
 export async function buildConfigForNode(
@@ -92,6 +93,18 @@ export async function buildConfigForNode(
         packageName,
         description,
       } as BackupConfig);
+    }
+    case 'serviceBinding': {
+      if (!metadataXml) {
+        return undefined;
+      }
+      const config = parseServiceBindingConfig(metadataXml);
+      return applyConfigName(
+        type,
+        name,
+        functionGroupName,
+        toBackupConfig(config),
+      );
     }
     case 'class': {
       if (!metadataXml) {

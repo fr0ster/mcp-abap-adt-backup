@@ -15,6 +15,7 @@ export function isRestoreImplemented(type?: SupportedType): boolean {
     case 'class':
     case 'program':
     case 'serviceDefinition':
+    case 'serviceBinding':
     case 'metadataExtension':
     case 'behaviorDefinition':
     case 'behaviorImplementation':

@@ -48,6 +48,9 @@ export function applyConfigName(
     case 'serviceDefinition':
       finalConfig.serviceDefinitionName = name;
       break;
+    case 'serviceBinding':
+      finalConfig.bindingName = name;
+      break;
     case 'metadataExtension':
       finalConfig.name = name;
       break;

@@ -22,6 +22,8 @@ export function normalizeType(rawType: string): SupportedType {
     function_module: 'functionModule',
     servicedefinition: 'serviceDefinition',
     service_definition: 'serviceDefinition',
+    servicebinding: 'serviceBinding',
+    service_binding: 'serviceBinding',
     metadataextension: 'metadataExtension',
     metadata_extension: 'metadataExtension',
     behaviordefinition: 'behaviorDefinition',

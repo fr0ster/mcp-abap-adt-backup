@@ -36,6 +36,9 @@ Use `--no-activate-on-create` or `--no-activate-on-update` to skip activation fo
 # Extract / patch a single object payload
 adt-backup extract --input backup.yaml --object class:ZCL_TEST --out ZCL_TEST.abap
 adt-backup patch --input backup.yaml --object class:ZCL_TEST --file ZCL_TEST.abap
+
+# Single object backup (Service Binding)
+adt-backup backup --objects serviceBinding:Z_UI_SERVICE --output srvb_backup.yaml --destination TRIAL
 ```
 
 ## Help
@@ -58,6 +61,35 @@ Use `-v` for main stages, `-vv` for per-object details, and `-vvv` for ADT/conne
 ## Roadmap
 
 See `docs/roadmap.yaml` for per-object backup/restore status and the plan for remaining types.
+
+## Supported Object Types
+
+| Object Type | Backup | Restore | Payload |
+|---|---|---|---|
+| `package` | implemented | implemented | metadata-xml |
+| `domain` | implemented | implemented | metadata-xml |
+| `dataElement` | implemented | implemented | metadata-xml |
+| `structure` | implemented | implemented | source |
+| `table` | implemented | implemented | source |
+| `tableType` | implemented | implemented | metadata-xml |
+| `view` | implemented | implemented | source |
+| `functionGroup` | implemented | implemented | metadata-xml |
+| `functionModule` | implemented | implemented | source |
+| `interface` | implemented | implemented | source |
+| `class` | implemented | implemented | source |
+| `program` | implemented | implemented | source |
+| `serviceDefinition` | implemented | implemented | source |
+| `serviceBinding` | implemented | implemented | metadata-xml |
+| `metadataExtension` | implemented | implemented | source |
+| `behaviorDefinition` | implemented | implemented | source |
+| `behaviorImplementation` | implemented | implemented | source |
+| `enhancement` | implemented | implemented | source |
+| `unitTest` | not-implemented | not-implemented | n/a |
+| `cdsUnitTest` | not-implemented | not-implemented | n/a |
+
+## Smoke Checklist
+
+When your landscape is ready, use `docs/SMOKE_CHECKLIST.md` for a focused backup/restore/verify checklist.
 
 ## Changelog
 

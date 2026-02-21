@@ -83,6 +83,12 @@ export async function readMetadataXmlForType(
         .readMetadata({ serviceDefinitionName: name });
       return responseToText(state.metadataResult);
     }
+    case 'serviceBinding': {
+      const state = await client
+        .getServiceBinding()
+        .readMetadata({ bindingName: name });
+      return responseToText(state.metadataResult);
+    }
     case 'metadataExtension': {
       const state = await client.getMetadataExtension().readMetadata({ name });
       return responseToText(state.metadataResult);

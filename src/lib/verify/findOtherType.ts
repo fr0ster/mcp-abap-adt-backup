@@ -15,6 +15,7 @@ const supportedTypes: SupportedType[] = [
   'program',
   'functionGroup',
   'serviceDefinition',
+  'serviceBinding',
   'metadataExtension',
   'behaviorDefinition',
   'behaviorImplementation',

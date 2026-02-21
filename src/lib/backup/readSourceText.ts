@@ -68,6 +68,12 @@ export async function readSourceText(
         .read({ serviceDefinitionName: spec.name }, 'active');
       return responseToText(state?.readResult);
     }
+    case 'serviceBinding': {
+      const state = await client
+        .getServiceBinding()
+        .read({ bindingName: spec.name }, 'active');
+      return responseToText(state?.readResult);
+    }
     case 'metadataExtension': {
       const state = await client
         .getMetadataExtension()

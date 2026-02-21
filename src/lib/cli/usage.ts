@@ -188,6 +188,7 @@ export function usage(command?: string): string {
     '  functionGroup:ZFG_TEST',
     '  functionModule:ZFG_TEST|ZFM_TEST',
     '  serviceDefinition:Z_I_SRV_DEF',
+    '  serviceBinding:Z_UI_SERVICE',
     '  metadataExtension:Z_I_SRV_EXT',
     '  behaviorDefinition:Z_I_BDEF',
   ].join('\n');

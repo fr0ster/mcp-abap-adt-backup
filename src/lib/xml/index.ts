@@ -8,5 +8,6 @@ export * from './getNodeAttribute';
 export * from './parseDataElementConfig';
 export * from './parseDomainConfig';
 export * from './parsePackageConfig';
+export * from './parseServiceBindingConfig';
 export * from './toBoolean';
 export * from './toNumber';

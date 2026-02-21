@@ -14,6 +14,7 @@ export const typeOrder: SupportedType[] = [
   'class',
   'program',
   'serviceDefinition',
+  'serviceBinding',
   'metadataExtension',
   'behaviorDefinition',
   'behaviorImplementation',

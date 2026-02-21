@@ -12,6 +12,7 @@ export type SupportedType =
   | 'functionGroup'
   | 'functionModule'
   | 'serviceDefinition'
+  | 'serviceBinding'
   | 'metadataExtension'
   | 'behaviorDefinition'
   | 'behaviorImplementation'

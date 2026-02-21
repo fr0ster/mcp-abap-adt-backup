@@ -12,6 +12,7 @@ import { extractMetadata } from '../xml/extractMetadata';
 import { parseDataElementConfig } from '../xml/parseDataElementConfig';
 import { parseDomainConfig } from '../xml/parseDomainConfig';
 import { parsePackageConfig } from '../xml/parsePackageConfig';
+import { parseServiceBindingConfig } from '../xml/parseServiceBindingConfig';
 import { readBasicMetadata } from './readBasicMetadata';
 import { readMetadataXmlForType } from './readMetadataXmlForType';
 import { readSourceText } from './readSourceText';
@@ -143,6 +144,28 @@ export async function backupObject(
           toBackupConfig(config),
         ),
         source,
+      };
+    }
+    case 'serviceBinding': {
+      const metadataXml = await readMetadataXmlForType(
+        client,
+        spec.type,
+        spec.name,
+      );
+      if (!metadataXml) {
+        throw new Error(`Service binding not found: ${spec.name}`);
+      }
+      const config = parseServiceBindingConfig(metadataXml);
+      return {
+        id,
+        type: spec.type,
+        name: spec.name,
+        config: applyConfigName(
+          spec.type,
+          spec.name,
+          undefined,
+          toBackupConfig(config),
+        ),
       };
     }
     case 'metadataExtension':

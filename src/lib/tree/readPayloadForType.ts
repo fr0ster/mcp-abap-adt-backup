@@ -33,7 +33,8 @@ export async function readPayloadForType(
     case 'domain':
     case 'dataElement':
     case 'package':
-    case 'functionGroup': {
+    case 'functionGroup':
+    case 'serviceBinding': {
       const xml = await readMetadataXmlForType(
         client,
         type,

@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+### Changed
+
+## [0.1.2] - 2026-02-21
+
+### Added
+- **Object Support:** Added `serviceBinding` support across backup/restore/verify flows.
+- **Documentation:** Added smoke test checklist for landscape validation in `docs/SMOKE_CHECKLIST.md`.
+
+### Changed
+- **Type Mapping:** Extended ADT type mapping and object normalization for `SRVB/SVB` / `serviceBinding`.
+- **Roadmap:** Marked `serviceBinding` as implemented for backup and restore in `docs/roadmap.yaml`.
+
 ## [0.1.1] - 2025-12-31
 
 ### Changed
