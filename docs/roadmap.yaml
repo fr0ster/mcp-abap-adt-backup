@@ -110,20 +110,15 @@ objectTypes:
       status: implemented
   unitTest:
     backup:
-      status: not-implemented
-      plan:
-        - "Discover unit test objects in package contents."
-        - "Extract test class sources and dependencies."
+      status: implemented
+      note: "Stored as class in backup"
     restore:
-      status: not-implemented
-      plan:
-        - "Create test classes and reattach to target package."
+      status: implemented
+      note: "Restored as test class in system"
   cdsUnitTest:
     backup:
-      status: not-implemented
-      plan:
-        - "Locate CDS test objects and extract source code."
+      status: implemented
+      note: "Stored as class in backup"
     restore:
-      status: not-implemented
-      plan:
-        - "Create CDS test classes and related artifacts."
+      status: implemented
+      note: "Restored as CDS test class in system"

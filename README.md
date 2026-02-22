@@ -84,8 +84,10 @@ See `docs/roadmap.yaml` for per-object backup/restore status and the plan for re
 | `behaviorDefinition` | implemented | implemented | source |
 | `behaviorImplementation` | implemented | implemented | source |
 | `enhancement` | implemented | implemented | source |
-| `unitTest` | not-implemented | not-implemented | n/a |
-| `cdsUnitTest` | not-implemented | not-implemented | n/a |
+| `unitTest` | implemented | implemented | as class |
+| `cdsUnitTest` | implemented | implemented | as class |
+
+> **Note**: Unit tests are stored as classes in backups. When restoring, they are created as test classes in the system.
 
 ## Smoke Checklist
 
