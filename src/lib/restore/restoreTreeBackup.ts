@@ -1,9 +1,8 @@
 import type { AdtClient, ObjectReference } from '@mcp-abap-adt/adt-clients';
 import { logVerbose } from '../cli/logVerbose';
-import { typeOrder } from '../constants/typeOrder';
 import { flattenTree } from '../tree/flattenTree';
 import { getNodeObjectId } from '../tree/getNodeObjectId';
-import type { BackupTreeNode, RestoreMode } from '../types';
+import type { BackupTreeNode, RestoreMode, SupportedType } from '../types';
 import { restoreTreeNode } from './restoreTreeNode';
 import { sortTreeNodesByDependencies } from './sortTreeNodesByDependencies';
 
@@ -17,6 +16,7 @@ export async function restoreTreeBackup(
   restoreActions?: Map<string, RestoreMode>,
   activateOnCreate = true,
   softwareComponent?: string,
+  superPackageOverride?: string,
 ): Promise<void> {
   const allNodes = flattenTree(root).filter(
     (node) => node.type && node.restoreStatus === 'ok',
@@ -28,95 +28,93 @@ export async function restoreTreeBackup(
       })
     : allNodes;
 
-  // Separate packages from non-packages
-  // Packages keep their tree order (parent before children)
   const packageNodes = nodes.filter((node) => node.type === 'package');
   const nonPackageNodes = nodes.filter((node) => node.type !== 'package');
-
-  // Sort non-packages by dependencies or typeOrder
-  const priority = new Map(typeOrder.map((type, index) => [type, index]));
-  const hasDependencies = nonPackageNodes.some(
-    (node) => Array.isArray(node.usedBy) && node.usedBy.length > 0,
-  );
-  const sortedNonPackages = hasDependencies
-    ? sortTreeNodesByDependencies(nonPackageNodes)
-    : nonPackageNodes.sort((a, b) => {
-        const aOrder = a.type ? (priority.get(a.type) ?? 999) : 999;
-        const bOrder = b.type ? (priority.get(b.type) ?? 999) : 999;
-        return aOrder - bOrder || a.name.localeCompare(b.name);
-      });
-
-  // Packages first (in tree order), then sorted non-packages
-  const orderedNodes = [...packageNodes, ...sortedNonPackages];
-
-  // Collect package names from backup tree for inheritance logic
   const backupPackageNames = new Set(packageNodes.map((node) => node.name));
 
-  logVerbose(
-    2,
-    `Restoring ${orderedNodes.length} node(s) from tree (mode=${mode}, activate=${activate})`,
-  );
-  logVerbose(
-    2,
-    `  Packages: ${packageNodes.length}, Other objects: ${sortedNonPackages.length}`,
-  );
+  const rootPackageName = root.name;
 
-  const activationList: ObjectReference[] = [];
+  logVerbose(1, `\n>>> STARTING RESTORE: ${nodes.length} objects (Target: ${rootPackageName})`);
 
-  for (const node of orderedNodes) {
-    logVerbose(3, `Restore ${node.type}:${node.name}`);
-    const nodeId = getNodeObjectId(node);
-    const nodeMode =
-      mode === 'upsert' && nodeId && restoreActions?.has(nodeId)
-        ? restoreActions.get(nodeId)
-        : mode;
-    const shouldActivate = nodeMode === 'create' ? activateOnCreate : activate;
-    const isPackage = node.type === 'package';
-    // Defer activation for non-package objects if activation is requested
-    const effectiveActivate = isPackage ? shouldActivate : false;
+  // Step 1: Packages (Hierarchy bottom-up)
+  if (packageNodes.length > 0) {
+    logVerbose(1, `[PHASE 1] Restoring package hierarchy...`);
+    const restorePackageRecursive = async (node: BackupTreeNode, parentName?: string) => {
+      if (node.type === 'package') {
+        const isRootNode = node.name === rootPackageName;
+        const nodeMode = (restoreActions?.get(getNodeObjectId(node)!) || mode) as RestoreMode;
+        const effectiveMode = isRootNode ? 'update' : nodeMode;
 
-    if (nodeMode === 'upsert') {
-      try {
-        await restoreTreeNode(
-          client,
-          node,
-          'create',
-          effectiveActivate,
-          transportRequest,
-          softwareComponent,
-          backupPackageNames,
-        );
-      } catch (_error) {
-        await restoreTreeNode(
-          client,
-          node,
-          'update',
-          effectiveActivate,
-          transportRequest,
-          softwareComponent,
-          backupPackageNames,
-        );
+        if (!restoreIds || restoreIds.has(getNodeObjectId(node)!) || isRootNode) {
+          logVerbose(2, `  -> Process [PACKAGE] ${node.name} (Parent: ${parentName || superPackageOverride || 'SYSTEM ROOT'})`);
+          try {
+            await restoreTreeNode(client, node, effectiveMode, false, transportRequest, softwareComponent, backupPackageNames, parentName || superPackageOverride);
+          } catch (e: any) {
+            if (isRootNode) {
+              logVerbose(1, `  ! Warning: Root package ${node.name} already exists or update skipped.`);
+            } else throw e;
+          }
+        }
       }
-    } else {
-      await restoreTreeNode(
-        client,
-        node,
-        nodeMode || mode,
-        effectiveActivate,
-        transportRequest,
-        softwareComponent,
-        backupPackageNames,
-      );
+      if (node.children) {
+        for (const child of node.children) {
+          await restorePackageRecursive(child, node.type === 'package' ? node.name : parentName);
+        }
+      }
+    };
+    await restorePackageRecursive(root, undefined);
+  }
+
+  // Step 2: Object Layers (The order matters for dependencies!)
+  const activationLayers: SupportedType[][] = [
+    ['domain', 'dataElement'],
+    ['structure', 'table', 'tableType'],
+    ['view'],
+    ['functionGroup', 'functionModule'],
+    ['interface', 'class', 'program'],
+    ['behaviorDefinition', 'behaviorImplementation'],
+    ['serviceDefinition', 'serviceBinding', 'metadataExtension'],
+    ['enhancement'],
+  ];
+
+  for (let i = 0; i < activationLayers.length; i++) {
+    const layerTypes = activationLayers[i];
+    const layerNodes = nonPackageNodes.filter(n => n.type && layerTypes.includes(n.type));
+    if (layerNodes.length === 0) continue;
+
+    logVerbose(1, `[PHASE ${i + 2}] Restoring layer: ${layerTypes.join(', ')} (${layerNodes.length} objects)`);
+    const activationList: ObjectReference[] = [];
+    const sortedLayerNodes = sortTreeNodesByDependencies(layerNodes);
+
+    for (const node of sortedLayerNodes) {
+      const nodeId = getNodeObjectId(node)!;
+      const nodeMode = (restoreActions?.get(nodeId) || mode) as RestoreMode;
+      const shouldActivate = (nodeMode === 'create' ? activateOnCreate : activate);
+
+      logVerbose(2, `  -> Restore [${node.type?.toUpperCase()}] ${node.name} (${nodeMode})`);
+      
+      try {
+        await restoreTreeNode(client, node, nodeMode, false, transportRequest, softwareComponent, backupPackageNames, undefined);
+        if (shouldActivate && node.adtType) {
+          activationList.push({ name: node.name, type: node.adtType });
+        }
+      } catch (error: any) {
+        logVerbose(1, `\n!!! CRITICAL FAILURE during restoration of ${node.type}:${node.name}`);
+        logVerbose(1, `Reason: ${error.message}`);
+        throw error; // Stop immediately to let user fix the order/dependency
+      }
     }
 
-    if (!isPackage && shouldActivate && node.adtType) {
-      activationList.push({ name: node.name, type: node.adtType });
+    if (activationList.length > 0) {
+      logVerbose(1, `  [*] Activating group of ${activationList.length} objects in this layer...`);
+      try {
+        await client.getUtils().activateObjectsGroup(activationList, true);
+        logVerbose(2, `  [OK] Layer ${i + 2} activated.`);
+      } catch (error: any) {
+        logVerbose(1, `  [!] WARNING: Layer activation failed: ${error.message}. Some objects might be inactive.`);
+      }
     }
   }
 
-  if (activationList.length > 0) {
-    logVerbose(2, `Activating ${activationList.length} object(s)...`);
-    // Pass true for preauditRequested to check before activating
-    await client.getUtils().activateObjectsGroup(activationList, true);
-  }
+  logVerbose(1, `\n>>> RESTORE COMPLETED SUCCESSFULLY.`);
 }

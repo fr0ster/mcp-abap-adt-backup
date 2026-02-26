@@ -21,6 +21,14 @@ export function createLogger(level: number) {
       }
     },
     error: (message: string, meta?: unknown) => {
+      // Silence 404 errors as they are expected during verify/restore missing objects
+      if (meta && typeof meta === 'object' && (meta as any).status === 404) {
+        if (level >= 3) {
+          const formatted = formatLogMeta(meta);
+          console.log(message, formatted || '');
+        }
+        return;
+      }
       const formatted = formatLogMeta(meta);
       console.error(message, formatted || '');
     },

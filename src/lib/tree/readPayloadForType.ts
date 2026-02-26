@@ -28,7 +28,7 @@ export async function readPayloadForType(
         name,
         functionGroupName,
       });
-      return { payload, format: 'source' };
+      return { payload: payload ?? undefined, format: 'source' };
     }
     case 'domain':
     case 'dataElement':
@@ -41,7 +41,7 @@ export async function readPayloadForType(
         name,
         functionGroupName,
       );
-      return { payload: xml, format: 'xml' };
+      return { payload: xml ?? undefined, format: 'xml' };
     }
     default:
       return {};

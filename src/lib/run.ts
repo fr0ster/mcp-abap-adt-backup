@@ -53,10 +53,13 @@ import { extractMetadata } from './xml/extractMetadata';
 
 export async function run(): Promise<void> {
   const argv = process.argv.slice(2);
-  verbosityState.level = getVerbosity(argv);
+  const args = parseArgs(argv.slice(1));
+  verbosityState.level =
+    typeof args.verbosity === 'number'
+      ? args.verbosity
+      : getVerbosity(argv);
   const logger = createLogger(verbosityState.level);
   const command = argv[0];
-  const args = parseArgs(argv.slice(1));
   const logFile = typeof args['log-file'] === 'string' ? args['log-file'] : '';
   if (logFile) {
     enableLogFile(logFile);
@@ -283,16 +286,33 @@ export async function run(): Promise<void> {
     throw new Error('Invalid backup file format');
   }
 
-  const envPath =
-    typeof args.env === 'string'
-      ? args.env
-      : typeof args.config === 'string'
-        ? args.config
-        : undefined;
-  const destination =
-    typeof args.destination === 'string' ? args.destination : undefined;
+  const isMcp = Boolean(args.mcp);
+  const isEnv = Boolean(args.env);
+  const envPathArg = typeof args['env-path'] === 'string' ? args['env-path'] : undefined;
+
+  let destination: string | undefined;
+  let envPath: string | undefined;
+
+  if (envPathArg) {
+    envPath = envPathArg;
+    destination = 'env';
+  } else if (isEnv) {
+    destination = 'env';
+  } else if (isMcp) {
+    destination = 'SAP';
+  } else {
+    destination = typeof args.destination === 'string' ? args.destination : undefined;
+  }
   const authRoot =
     typeof args['auth-root'] === 'string' ? args['auth-root'] : undefined;
+  const browserAuthPortStr =
+    typeof args['browser-auth-port'] === 'string'
+      ? args['browser-auth-port']
+      : undefined;
+  const browserAuthPort = browserAuthPortStr
+    ? Number.parseInt(browserAuthPortStr, 10)
+    : 10001;
+
   if (!envPath && !destination) {
     throw new Error('Missing --destination (or provide --env)');
   }
@@ -300,6 +320,7 @@ export async function run(): Promise<void> {
     destination,
     envPath,
     authRoot,
+    browserAuthPort,
     logger,
   });
   const allowAdtLogs = verbosityState.level >= 2 || debugAdt;
@@ -490,7 +511,7 @@ export async function run(): Promise<void> {
         if (actualSource === undefined) {
           throw new Error('Source not available for diff');
         }
-        const hasDiff = await diffSource(label, backupText, actualSource, true);
+        const hasDiff = await diffSource(label, backupText, actualSource ?? '', true);
         if (!hasDiff) {
           console.log('No source differences detected');
         }
@@ -548,7 +569,7 @@ export async function run(): Promise<void> {
         const hasDiff = await diffSource(
           label,
           backupText,
-          actualSource,
+          actualSource ?? '',
           showOk,
         );
         if (hasDiff) {
@@ -588,7 +609,7 @@ export async function run(): Promise<void> {
       const hasDiff = await diffSource(
         formatObjectSpec(spec),
         obj.source,
-        actualSource,
+        actualSource ?? '',
         true,
       );
       if (!hasDiff) {
@@ -612,7 +633,7 @@ export async function run(): Promise<void> {
       const hasDiff = await diffSource(
         formatObjectSpec(spec),
         obj.source,
-        actualSource,
+        actualSource ?? '',
         showOk,
       );
       if (hasDiff) {
@@ -632,6 +653,7 @@ export async function run(): Promise<void> {
     }
     const format = typeof args.format === 'string' ? args.format : 'text';
     const strict = Boolean(args.strict);
+    const post = Boolean(args.post);
     const raw = fs.readFileSync(input, 'utf8');
     const parsed = YAML.parse(raw) as BackupFile | BackupTreeFile;
     if (!parsed || typeof parsed !== 'object') {
@@ -641,11 +663,21 @@ export async function run(): Promise<void> {
     if ((parsed as BackupTreeFile).schemaVersion === 2) {
       verifyTreeChecksums((parsed as BackupTreeFile).root);
     }
-    const result = await verifyBackup(client, parsed, { strict });
+    const result = await verifyBackup(client, parsed, {
+      strict,
+      mode: post ? 'post-restore' : 'pre-restore',
+    });
     if (format === 'json') {
       console.log(JSON.stringify(result, null, 2));
     } else {
-      console.log(formatVerifyResultsText(result.entries, result.summary));
+      console.log(
+        formatVerifyResultsText(
+          result.entries,
+          result.summary,
+          post ? 'post-restore' : 'pre-restore',
+          verbosityState.level,
+        ),
+      );
     }
     if (result.summary.conflicts > 0) {
       throw new Error(`Conflicts found: ${result.summary.conflicts}`);
@@ -661,8 +693,9 @@ export async function run(): Promise<void> {
     logVerbose(2, `Starting restore from ${input}`);
     const raw = fs.readFileSync(input, 'utf8');
     const mode = (args.mode as RestoreMode) || 'upsert';
+    const noActivate = Boolean(args['no-activate']);
     const activateOnUpdate =
-      Boolean(args.activate) || !args['no-activate-on-update'];
+      !noActivate && (Boolean(args.activate) || !args['no-activate-on-update']);
     const parsed = YAML.parse(raw) as BackupFile | BackupTreeFile;
     if (!parsed || typeof parsed !== 'object') {
       throw new Error('Invalid backup file format');
@@ -670,12 +703,17 @@ export async function run(): Promise<void> {
     const force = Boolean(args.force);
     const strict = Boolean(args.strict);
     const dangerous = Boolean(args.dangerous);
-    const activateOnCreate = !args['no-activate-on-create'];
+    const dry = Boolean(args.dry);
+    const activateOnCreate = !noActivate && !args['no-activate-on-create'];
     const transportRequest =
       typeof args.transport === 'string' ? args.transport : undefined;
     const softwareComponent =
       typeof args['software-component'] === 'string'
         ? args['software-component']
+        : undefined;
+    const superPackage =
+      typeof args['super-package'] === 'string'
+        ? args['super-package']
         : undefined;
     if (transportRequest) {
       logVerbose(1, `Using transport request for restore: ${transportRequest}`);
@@ -743,6 +781,13 @@ export async function run(): Promise<void> {
           console.log('Restore skipped: no changes detected');
           return;
         }
+        if (dry) {
+          logVerbose(
+            1,
+            '\n[DRY RUN] Restore plan built successfully. No changes were made to the system.',
+          );
+          return;
+        }
         logVerbose(2, `Restoring tree backup for package ${tree.package}`);
         await restoreTreeBackup(
           client,
@@ -755,7 +800,19 @@ export async function run(): Promise<void> {
           activateOnCreate,
           softwareComponent,
         );
-        console.log('Restore completed');
+        console.log('Restore completed. Running post-restore verification...');
+        const postResult = await verifyBackup(client, tree, {
+          strict,
+          mode: 'post-restore',
+        });
+        console.log(
+          formatVerifyResultsText(postResult.entries, postResult.summary, 'post-restore', verbosityState.level),
+        );
+        if (postResult.summary.conflicts > 0) {
+          throw new Error(
+            `Post-restore conflicts found: ${postResult.summary.conflicts}`,
+          );
+        }
         return;
       }
       logVerbose(2, `Restoring tree backup for package ${tree.package}`);
@@ -770,7 +827,19 @@ export async function run(): Promise<void> {
         activateOnCreate,
         softwareComponent,
       );
-      console.log('Restore completed');
+      console.log('Restore completed. Running post-restore verification...');
+      const postResult = await verifyBackup(client, (parsed as BackupTreeFile), {
+        strict,
+        mode: 'post-restore',
+      });
+      console.log(
+        formatVerifyResultsText(postResult.entries, postResult.summary, 'post-restore', verbosityState.level),
+      );
+      if (postResult.summary.conflicts > 0) {
+        throw new Error(
+          `Post-restore conflicts found: ${postResult.summary.conflicts}`,
+        );
+      }
       return;
     }
     if (!Array.isArray((parsed as BackupFile).objects)) {
@@ -803,7 +872,14 @@ export async function run(): Promise<void> {
         console.log('Restore skipped: no changes detected');
         return;
       }
-      logVerbose(2, `Restoring flat backup (${flat.objects.length} objects)`);
+      if (dry) {
+      logVerbose(
+        1,
+        '\n[DRY RUN] Restore execution skipped. No changes were made to the system.',
+      );
+      return;
+    }
+    logVerbose(2, `Restoring flat backup (${flat.objects.length} objects)`);
       await restoreObjects(
         client,
         flat.objects,
@@ -813,7 +889,26 @@ export async function run(): Promise<void> {
         restoreActions,
         activateOnCreate,
       );
-      console.log(`Restore completed for ${flat.objects.length} object(s)`);
+      console.log('Restore completed. Running post-restore verification...');
+      const postResult = await verifyBackup(client, flat, {
+        strict,
+        mode: 'post-restore',
+      });
+      console.log(
+        formatVerifyResultsText(postResult.entries, postResult.summary, 'post-restore', verbosityState.level),
+      );
+      if (postResult.summary.conflicts > 0) {
+        throw new Error(
+          `Post-restore conflicts found: ${postResult.summary.conflicts}`,
+        );
+      }
+      return;
+    }
+    if (dry) {
+      logVerbose(
+        1,
+        '\n[DRY RUN] Restore execution skipped. No changes were made to the system.',
+      );
       return;
     }
     logVerbose(2, `Restoring flat backup (${flat.objects.length} objects)`);
@@ -826,7 +921,19 @@ export async function run(): Promise<void> {
       undefined,
       activateOnCreate,
     );
-    console.log(`Restore completed for ${flat.objects.length} object(s)`);
+    console.log('Restore completed. Running post-restore verification...');
+    const postResult = await verifyBackup(client, flat, {
+      strict,
+      mode: 'post-restore',
+    });
+    console.log(
+      formatVerifyResultsText(postResult.entries, postResult.summary, 'post-restore', verbosityState.level),
+    );
+    if (postResult.summary.conflicts > 0) {
+      throw new Error(
+        `Post-restore conflicts found: ${postResult.summary.conflicts}`,
+      );
+    }
     return;
   }
 

@@ -8,7 +8,7 @@
 - **Build System:** `tsc` (TypeScript Compiler)
 - **Linting/Formatting:** Biome (`biome.json`)
 - **Dependencies:**
-    - `@mcp-abap-adt/*`: Core libraries for ADT communication and authentication.
+    - `@mcp-abap-adt/*`: Core libraries for ADT communication and authentication (adt-clients, auth-broker, auth-providers, auth-stores, connection).
     - `fast-xml-parser`: XML processing.
     - `yaml`: YAML processing.
 
@@ -16,14 +16,19 @@
 - **`src/bin/adt-backup.ts`**: Entry point for the CLI.
 - **`src/lib/`**: Core logic.
     - **`run.ts`**: Main execution flow.
-    - **`cli/`**: Argument parsing, logging configuration.
     - **`auth/`**: Authentication handling (providers, stores).
     - **`backup/`**: Logic for backing up objects (reading metadata/source).
     - **`restore/`**: Logic for restoring objects (creation, activation).
     - **`tree/`**: Tree construction and manipulation (dependency handling).
+    - **`verify/`**: Comparison of local backups with system state.
+    - **`crypto/`**: Checksum calculation and verification (integrity checks).
     - **`xml/`**: XML parsing and generation helpers.
+    - **`dependencies/`**: Dependency collection for tree nodes.
+    - **`utils/`**: Shared utilities and configuration helpers.
+    - **`constants/`**: Type ordering and parser configuration.
+    - **`cli/`**: Argument parsing, logging configuration.
 - **`docs/roadmap.yaml`**: Tracks support status (implemented/planned) for different ABAP object types.
-- **`scripts/`**: Utility scripts (e.g., `dump-adt-xml.js`, `integration-test.mjs`).
+- **`scripts/`**: Utility and debug scripts (e.g., `integration-test.mjs`, `delete-package.ts`).
 
 ## Development Workflow
 
@@ -50,14 +55,13 @@ The project uses **Biome**.
 
 ### Testing
 - **Automated:** `npm run test:integration` (runs `scripts/integration-test.mjs`).
-- **Manual:** Build the project and run the CLI against a test SAP system (trial or sandbox).
+- **Manual:** Build the project and run the CLI against a test SAP system.
   ```bash
   node dist/bin/adt-backup.js <command> ...
   ```
 
 ## CLI Usage Reference
-See `README.md` for full details. Common commands:
-
+Common commands:
 - **Backup Package:** `adt-backup backup --package <PKG> --output <FILE> --destination <DEST>`
 - **Backup Tree (No Source):** `adt-backup tree --package <PKG> --output <FILE> --destination <DEST>`
 - **Restore:** `adt-backup restore --input <FILE> --mode upsert --destination <DEST>`
@@ -67,8 +71,15 @@ See `README.md` for full details. Common commands:
 - **Style:** Adhere to Biome settings (2 spaces indentation, single quotes, semicolons).
 - **Naming:** Explicit, descriptive names. CLI commands are lowercase.
 - **Language:** All artifacts (code, comments, documentation) are in English; communication (chat, commit messages) is in Ukrainian.
-- **Auth:** Never commit `.env` or auth config files. Use local-only configs or environment variables.
-- **Imports:** Organize imports using Biome (`npm run lint` handles this).
+- **Integrity:** Use checksums (`src/lib/crypto`) to ensure backup consistency.
+- **Auth:** Never commit `.env` or auth config files. Use environment variables or local configs.
 
-## Roadmap
-Refer to `docs/roadmap.yaml` to check if a specific ABAP object type is supported for backup or restore before attempting implementation.
+## Roadmap & Support
+Refer to `docs/roadmap.yaml` for the current status of supported ABAP object types. Currently supports most core types including:
+- Packages, Classes, Interfaces, Programs
+- Function Groups & Modules
+- Tables, Views, Data Elements, Domains, Table Types
+- CDS (Data Definitions, Metadata Extensions, Service Definitions, Service Bindings)
+- Behavior Definitions & Implementations
+- Enhancements
+- Unit Tests (Class-based and CDS)

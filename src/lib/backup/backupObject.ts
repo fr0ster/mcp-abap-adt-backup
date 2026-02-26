@@ -143,7 +143,7 @@ export async function backupObject(
           undefined,
           toBackupConfig(config),
         ),
-        source,
+        source: source ?? undefined,
       };
     }
     case 'serviceBinding': {
@@ -186,7 +186,7 @@ export async function backupObject(
         type: spec.type,
         name: spec.name,
         config,
-        source,
+        source: source ?? undefined,
       };
     }
     case 'behaviorImplementation':
@@ -210,7 +210,7 @@ export async function backupObject(
         type: spec.type,
         name: spec.name,
         config,
-        source,
+        source: source ?? undefined,
       };
     }
     case 'functionModule': {
@@ -233,7 +233,7 @@ export async function backupObject(
         name: spec.name,
         functionGroupName: spec.functionGroupName,
         config,
-        source,
+        source: source ?? undefined,
       };
     }
     default: {
@@ -253,7 +253,7 @@ export async function backupObject(
         type: spec.type,
         name: spec.name,
         config,
-        source,
+        source: source ?? undefined,
       };
     }
   }

@@ -2,7 +2,10 @@ const commonOptions = [
   'Common Options:',
   '  --destination <name>      Destination name for AuthBroker stores',
   '  --env <file>              Path to .env file',
+  '  --env-path <file>         Path to .env file (alias for --env)',
   '  --auth-root <path>        Root folder with auth configs',
+  '  --mcp                     Enable MCP-compatible mode',
+  '  --browser-auth-port <port> Port for OAuth callback server (default: 10001)',
   '  --log-file <path>         Write console output to a file',
   '  --debug-adt               Enable ADT/connection logs',
   '  -v, -vv, -vvv             Verbosity levels',
@@ -34,7 +37,9 @@ Restores objects from a backup file.
 Options:
   --input <file>            Backup file to restore
   --mode <mode>             Restore mode: create, update, upsert (default: upsert)
+  --dry                     Dry run: build and show restore plan without making changes
   --activate                Activate objects after restore (default for updates)
+  --no-activate             Disable all activations (including group activation)
   --no-activate-on-create   Skip activation for new objects
   --no-activate-on-update   Skip activation for updated objects
   --force                   Force restore even if conflicts are found
@@ -42,6 +47,7 @@ Options:
   --dangerous               Delete objects from system before restore (package only)
   --transport <request>     Transport request for changes
   --software-component <name> Override software component for packages
+  --super-package <name>    Default super package for root packages
 
 ${commonOptions}
 
@@ -77,6 +83,7 @@ Options:
   --input <file>            Backup file to verify
   --format <format>         Output format: text, json (default: text)
   --strict                  Fail on any verification error
+  --post                    Post-restore mode (missing objects are conflicts)
 
 ${commonOptions}
 

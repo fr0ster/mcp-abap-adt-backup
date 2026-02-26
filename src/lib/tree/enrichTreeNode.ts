@@ -55,7 +55,7 @@ export async function enrichTreeNode(
       mappedType,
       node.name,
       functionGroupName,
-      metadataXml,
+      metadataXml ?? undefined,
     );
     if (config) {
       nextNode.config = ensureDescription(config, node.name);

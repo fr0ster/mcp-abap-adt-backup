@@ -6,3 +6,7 @@ tsconfig.tsbuildinfo
 mdd.env
 mdd.json
 tests/test-config.yaml
+tests/backups/*
+
+.env
+mcp.env
