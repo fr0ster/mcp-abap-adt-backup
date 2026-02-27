@@ -27,7 +27,6 @@ export function createTokenProvider(
     clientSecret: authConfig.uaaClientSecret,
     refreshToken: authConfig.refreshToken,
     browser: 'system',
-    // @ts-ignore - Support custom redirectPort to avoid conflicts with MCP (port 3001)
     redirectPort: browserAuthPort || 10001,
     logger: shouldEnableProviderLogger() ? logger : undefined,
   } as any);

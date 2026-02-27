@@ -35,6 +35,7 @@ export function mapAdtTypeToSupported(
     'BIMP/BI': 'behaviorImplementation',
     'BIMP/BO': 'behaviorImplementation',
     'ENHO/ENH': 'enhancement',
+    'DCLS/DL': 'accessControl',
   };
 
   if (map[normalized]) {
@@ -62,6 +63,7 @@ export function mapAdtTypeToSupported(
   if (normalized.startsWith('BIMP/') || normalized.startsWith('BIMPL/'))
     return 'behaviorImplementation';
   if (normalized.startsWith('ENHO/')) return 'enhancement';
+  if (normalized.startsWith('DCLS/')) return 'accessControl';
 
   return undefined;
 }

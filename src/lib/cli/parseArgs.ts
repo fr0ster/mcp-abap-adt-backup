@@ -1,4 +1,6 @@
-export function parseArgs(argv: string[]): Record<string, string | boolean | number> {
+export function parseArgs(
+  argv: string[],
+): Record<string, string | boolean | number> {
   const args: Record<string, string | boolean | number> = {};
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];

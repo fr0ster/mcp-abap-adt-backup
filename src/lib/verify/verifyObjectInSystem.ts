@@ -24,48 +24,73 @@ export async function verifyObjectInSystem(
   };
 
   try {
-    // If format is XML, we check metadata (e.g. for Domain, DataElement, Package)
-    if (expectedFormat === 'xml' || spec.type === 'package' || spec.type === 'domain' || spec.type === 'dataElement' || spec.type === 'functionGroup') {
-      const metadataXml = await readMetadataXmlForType(client, spec.type, spec.name, spec.functionGroupName);
-      
-      if (metadataXml === null) return { ...base, status: 'missing' };
-      if (metadataXml === undefined) return { ...base, status: 'unsupported', message: 'Metadata check not supported' };
+    // 1. Try to get metadata first (works for almost everything)
+    const metadataXml = await readMetadataXmlForType(
+      client,
+      spec.type,
+      spec.name,
+      spec.functionGroupName,
+    );
 
-      const metadata = extractMetadata(metadataXml);
-      if (metadata.packageName) base.actualPackage = metadata.packageName;
-
-      if (expectedPackage && metadata.packageName && metadata.packageName.toUpperCase() !== expectedPackage.toUpperCase()) {
-        return { ...base, status: 'package-mismatch', message: `Expected package ${expectedPackage}, found ${metadata.packageName}` };
-      }
-      return base;
-    } 
-    
-    // If format is Source or unknown, we check existence via Source (e.g. for Class, View, BDEF)
-    const actualSource = await readSourceText(client, spec, version);
-    
-    if (actualSource === null) return { ...base, status: 'missing' };
-    
-    // For source objects, we might also want to know the package, so we try metadata as a secondary check
-    try {
-      const metaXml = await readMetadataXmlForType(client, spec.type, spec.name, spec.functionGroupName);
-      if (metaXml) {
-        const metadata = extractMetadata(metaXml);
-        if (metadata.packageName) base.actualPackage = metadata.packageName;
-        if (expectedPackage && metadata.packageName && metadata.packageName.toUpperCase() !== expectedPackage.toUpperCase()) {
-          return { ...base, status: 'package-mismatch', message: `Expected package ${expectedPackage}, found ${metadata.packageName}` };
-        }
-      }
-    } catch (e) {
-      // Ignore metadata failure for source-only objects
+    if (metadataXml === null) {
+      return { ...base, status: 'missing' };
     }
 
-    const expectedText = expectedSourceBase64 !== undefined ? decodeBase64(expectedSourceBase64) : expectedSource;
-    if (expectedText !== undefined && actualSource !== undefined && expectedText !== actualSource) {
-      return { ...base, status: 'source-mismatch', message: 'Source differs from backup' };
+    if (metadataXml !== undefined) {
+      const metadata = extractMetadata(metadataXml);
+      if (metadata.packageName) {
+        base.actualPackage = metadata.packageName;
+      }
+
+      if (
+        expectedPackage &&
+        metadata.packageName &&
+        metadata.packageName.toUpperCase() !== expectedPackage.toUpperCase()
+      ) {
+        return {
+          ...base,
+          status: 'package-mismatch',
+          message: `Expected package ${expectedPackage}, found ${metadata.packageName}`,
+        };
+      }
+
+      // If we don't need source check, we're done
+      if (!expectedSource && !expectedSourceBase64) {
+        return base;
+      }
+    }
+
+    // 2. Secondary check via Source (if required or metadata is unsupported)
+    const actualSource = await readSourceText(client, spec, version);
+
+    if (actualSource === null && metadataXml === undefined) {
+      // If metadata was unsupported AND source is missing - it's missing
+      return { ...base, status: 'missing' };
+    }
+
+    if (actualSource !== undefined) {
+      const expectedText =
+        expectedSourceBase64 !== undefined
+          ? decodeBase64(expectedSourceBase64)
+          : expectedSource;
+
+      if (expectedText !== undefined && expectedFormat !== 'xml') {
+        if (expectedText !== actualSource) {
+          return {
+            ...base,
+            status: 'source-mismatch',
+            message: 'Source differs from backup',
+          };
+        }
+      }
     }
 
     return base;
   } catch (error: any) {
-    return { ...base, status: 'error', message: error.message || String(error) };
+    return {
+      ...base,
+      status: 'error',
+      message: error.message || String(error),
+    };
   }
 }

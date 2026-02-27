@@ -17,10 +17,11 @@ export type SupportedType =
   | 'behaviorDefinition'
   | 'behaviorImplementation'
   | 'enhancement'
+  | 'accessControl'
   | 'unitTest'
   | 'cdsUnitTest';
 
-export type RestoreMode = 'create' | 'update' | 'upsert';
+export type RestoreMode = 'create' | 'update' | 'upsert' | 'skip';
 
 export type BackupConfig = Record<string, unknown>;
 
@@ -68,6 +69,29 @@ export interface BackupTreeFile {
   package: string;
   root: BackupTreeNode;
   checksum?: string;
+}
+
+export interface RestorePlanAction {
+  id: string;
+  type: SupportedType;
+  name: string;
+  functionGroupName?: string;
+  action: 'create' | 'update' | 'skip';
+  adtType?: string;
+}
+
+export interface RestorePlanGroup {
+  id: number;
+  isCircular: boolean;
+  actions: RestorePlanAction[];
+}
+
+export interface RestorePlan {
+  schemaVersion: 1;
+  generatedAt: string;
+  backupFile: string;
+  targetPackage: string;
+  groups: RestorePlanGroup[];
 }
 
 export type NodeValue =

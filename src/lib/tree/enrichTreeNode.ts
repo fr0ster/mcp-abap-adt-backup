@@ -41,6 +41,10 @@ export async function enrichTreeNode(
     `Node: ${node.name} [${node.adtType || 'unknown'}] -> ${mappedType || 'unknown'} (${nextNode.restoreStatus})`,
   );
 
+  if (mappedType && includeCode) {
+    logVerbose(2, `  Reading ${mappedType}:${node.name}`);
+  }
+
   const metadataXml =
     mappedType && includeCode
       ? await readMetadataXmlForType(client, mappedType, node.name)

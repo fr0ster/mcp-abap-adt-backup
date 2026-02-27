@@ -1,9 +1,9 @@
 import type { AdtClient, ObjectReference } from '@mcp-abap-adt/adt-clients';
 import { logVerbose } from '../cli/logVerbose';
 import type { BackupObject, RestoreMode } from '../types';
+import { verifyObjectInSystem } from '../verify/verifyObjectInSystem';
 import { restoreObject } from './restoreObject';
 import { sortByDependencies } from './sortByDependencies';
-import { verifyObjectInSystem } from '../verify/verifyObjectInSystem';
 
 const ADT_TYPE_MAP: Partial<Record<string, string>> = {
   package: 'DEVC/K',
@@ -24,6 +24,7 @@ const ADT_TYPE_MAP: Partial<Record<string, string>> = {
   behaviorDefinition: 'BDEF/B',
   behaviorImplementation: 'CLAS/OC',
   enhancement: 'ENHO/EI',
+  accessControl: 'DCLS/DL',
 };
 
 export async function restoreObjects(

@@ -1,8 +1,9 @@
 const commonOptions = [
   'Common Options:',
-  '  --destination <name>      Destination name for AuthBroker stores',
-  '  --env <file>              Path to .env file',
-  '  --env-path <file>         Path to .env file (alias for --env)',
+  '  --destination <name>      Target system name (from AuthBroker stores)',
+  '  --target <name>           Alias for --destination',
+  '  --env <file>              Path to .env file for target system',
+  '  --env-path <file>         Alias for --env',
   '  --auth-root <path>        Root folder with auth configs',
   '  --mcp                     Enable MCP-compatible mode',
   '  --browser-auth-port <port> Port for OAuth callback server (default: 10001)',
@@ -15,7 +16,7 @@ const commands: Record<string, string> = {
   backup: `
 Usage: adt-backup backup [options]
 
-Backs up ABAP objects or packages.
+Backs up ABAP objects or packages from the source system.
 
 Options:
   --objects <list>          Comma-separated list of objects (type:name)
@@ -23,43 +24,119 @@ Options:
   --output <file>           Output file (default: backup.yaml)
 
 ${commonOptions}
+`.trim(),
+
+  tree: `
+Usage: adt-backup tree [options]
+
+Fetches package hierarchy and dependencies from the source system.
+
+Options:
+  --package <name>          Name of the package to analyze
+  --output <file>           Output file (default: tree.yaml)
+
+${commonOptions}
+`.trim(),
+
+  enrich: `
+Usage: adt-backup enrich [options]
+
+Populates a tree file with metadata and source code from the source system.
+
+Options:
+  --input <file>            Input tree YAML file
+  --output <file>           Output backup file (defaults to input file)
+
+${commonOptions}
+`.trim(),
+
+  plan: `
+Usage: adt-backup plan [options]
+
+Builds a dependency-based restoration sequence (offline).
+
+Options:
+  --input <file>            Backup file to analyze
+  --output <file>           Output plan file (default: plan.yaml)
+  --mode <mode>             Default action for all objects: create, update, upsert (default: create)
 
 Examples:
-  adt-backup backup --objects class:ZCL_TEST,view:ZV_TEST
-  adt-backup backup --package ZPKG_TEST --output backup.yaml
+  adt-backup plan --input backup.yaml --output plan.yaml
+`.trim(),
+
+  verify: `
+Usage: adt-backup verify [options]
+
+Updates a restoration plan with actual TARGET system state (online).
+
+Options:
+  --plan <file>             Plan file to update (required)
+  --output <file>           Output plan file (defaults to input file)
+  --skip-existing           Skip existing objects (mark as 'skip' instead of 'update')
+
+${commonOptions}
+
+Examples:
+  adt-backup verify --plan plan.yaml --target mdd-sk-dev
+  adt-backup verify --plan plan.yaml --target mdd-sk-dev --skip-existing
+`.trim(),
+
+  check: `
+Usage: adt-backup check [options]
+
+Compares backup file with the TARGET system (online).
+
+Options:
+  --input <file>            Backup file to check
+  --format <format>         Output format: text, json (default: text)
+  --strict                  Fail on any difference (source/package)
+
+${commonOptions}
+
+Examples:
+  adt-backup check --input backup.yaml --target mdd-sk-dev
 `.trim(),
 
   restore: `
 Usage: adt-backup restore [options]
 
-Restores objects from a backup file.
+Executes a restoration plan on the TARGET system (online).
 
 Options:
-  --input <file>            Backup file to restore
-  --mode <mode>             Restore mode: create, update, upsert (default: upsert)
-  --dry                     Dry run: build and show restore plan without making changes
-  --activate                Activate objects after restore (default for updates)
+  --plan <file>             Pre-generated and verified plan file (required)
   --no-activate             Disable all activations (including group activation)
-  --no-activate-on-create   Skip activation for new objects
-  --no-activate-on-update   Skip activation for updated objects
-  --force                   Force restore even if conflicts are found
-  --strict                  Fail on any verification error
-  --dangerous               Delete objects from system before restore (package only)
-  --transport <request>     Transport request for changes
+  --transport <request>     Transport request for changes in target system
   --software-component <name> Override software component for packages
+  --transport-layer <name>   Override transport layer for packages
   --super-package <name>    Default super package for root packages
 
 ${commonOptions}
 
 Examples:
-  adt-backup restore --input backup.yaml --mode upsert --activate
-  adt-backup restore --input backup.yaml --force --transport DEVK900001
+  adt-backup restore --plan plan.yaml --target mdd-sk-dev
+`.trim(),
+
+  activate: `
+Usage: adt-backup activate [options]
+
+Activates existing objects in the TARGET system based on a plan file.
+Useful after --skip-existing to activate objects that were skipped during restore.
+
+Options:
+  --plan <file>             Plan file to read (required)
+  --filter <mode>           Which objects to activate: skip, update, or all (default: all)
+
+${commonOptions}
+
+Examples:
+  adt-backup activate --plan plan.yaml --target mdd-sk-dev
+  adt-backup activate --plan plan.yaml --target mdd-sk-dev --filter skip
 `.trim(),
 
   diff: `
 Usage: adt-backup diff [options]
 
-Compares backup content with the current system state.
+Compares backup content with the TARGET system state.
 
 Options:
   --input <file>            Backup file to compare
@@ -68,93 +145,28 @@ Options:
   --show-ok                 Show objects with no differences
 
 ${commonOptions}
-
-Examples:
-  adt-backup diff --input backup.yaml --all
-  adt-backup diff --input backup.yaml --object class:ZCL_TEST
-`.trim(),
-
-  verify: `
-Usage: adt-backup verify [options]
-
-Verifies the integrity of a backup file (source-only).
-
-Options:
-  --input <file>            Backup file to verify
-  --format <format>         Output format: text, json (default: text)
-  --strict                  Fail on any verification error
-  --post                    Post-restore mode (missing objects are conflicts)
-
-${commonOptions}
-
-Examples:
-  adt-backup verify --input backup.yaml
 `.trim(),
 
   validate: `
 Usage: adt-backup validate [options]
 
-Validates the internal checksums of a backup file.
+Validates the internal checksums of a backup file (offline).
 
 Options:
   --input <file>            Backup file to validate
   --object <type:name>      Specific object to validate (optional)
-
-${commonOptions}
-
-Examples:
-  adt-backup validate --input backup.yaml
-`.trim(),
-
-  extract: `
-Usage: adt-backup extract [options]
-
-Extracts a single object's source code from a backup file.
-
-Options:
-  --input <file>            Backup file
-  --object <type:name>      Object to extract
-  --out <file>              Output file path
-
-${commonOptions}
-
-Examples:
-  adt-backup extract --input backup.yaml --object class:ZCL_TEST --out ZCL_TEST.abap
-`.trim(),
-
-  patch: `
-Usage: adt-backup patch [options]
-
-Patches an object's source code in a backup file.
-
-Options:
-  --input <file>            Backup file
-  --object <type:name>      Object to patch
-  --file <file>             File containing new source code
-  --output <file>           Output backup file (defaults to input file)
-
-${commonOptions}
-
-Examples:
-  adt-backup patch --input backup.yaml --object class:ZCL_TEST --file ZCL_TEST.abap
 `.trim(),
 
   list: `
 Usage: adt-backup list [options]
 
-Lists contents of a backup file.
+Lists contents of a backup file (offline).
 
 Options:
   --input <file>            Backup file
   --format <format>         Output format: text, json (default: text)
   --flat                    List flattened objects (for tree backups)
   --deps                    Show dependencies (tree structure only)
-
-${commonOptions}
-
-Examples:
-  adt-backup list --input backup.yaml
-  adt-backup list --input backup.yaml --flat
 `.trim(),
 };
 
@@ -169,34 +181,20 @@ export function usage(command?: string): string {
     'Usage: adt-backup <command> [options]',
     '',
     'Commands:',
-    '  backup    Backup ABAP objects or packages',
-    '  restore   Restore objects from backup',
-    '  diff      Compare backup with system',
-    '  verify    Verify backup integrity',
+    '  tree      Fetch package hierarchy and dependencies (no source)',
+    '  enrich    Populate tree file with metadata and source',
+    '  backup    Backup ABAP objects or packages (one-step)',
+    '  plan      Prepare restoration sequence (offline)',
+    '  verify    Update plan with target system state (online)',
+    '  check     Check backup against target system (online)',
+    '  restore   Execute restoration plan on target system (online)',
+    '  activate  Activate existing objects in target system',
+    '  diff      Compare backup with target system',
     '  validate  Validate backup checksums',
-    '  extract   Extract object source',
-    '  patch     Patch object source in backup',
     '  list      List backup contents',
     '',
     'Run "adt-backup <command> --help" for command-specific options.',
     '',
     commonOptions,
-    '',
-    'Object type examples:',
-    '  class:ZCL_TEST',
-    '  interface:ZIF_TEST',
-    '  program:ZREP_TEST',
-    '  view:ZV_TEST',
-    '  domain:ZDOM_TEST',
-    '  dataElement:ZDE_TEST',
-    '  structure:ZST_TEST',
-    '  table:ZT_TEST',
-    '  tableType:ZTT_TEST',
-    '  functionGroup:ZFG_TEST',
-    '  functionModule:ZFG_TEST|ZFM_TEST',
-    '  serviceDefinition:Z_I_SRV_DEF',
-    '  serviceBinding:Z_UI_SERVICE',
-    '  metadataExtension:Z_I_SRV_EXT',
-    '  behaviorDefinition:Z_I_BDEF',
   ].join('\n');
 }

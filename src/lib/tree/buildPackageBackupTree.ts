@@ -9,7 +9,7 @@ export async function buildPackageBackupTree(
   packageName: string,
 ): Promise<BackupTreeFile> {
   const packageNameUpper = packageName.toUpperCase();
-  logVerbose(2, `Fetching package hierarchy for ${packageNameUpper}`);
+  logVerbose(1, `Fetching package hierarchy for ${packageNameUpper}`);
   const hierarchy = await client
     .getUtils()
     .getPackageHierarchy(packageNameUpper);
@@ -19,10 +19,10 @@ export async function buildPackageBackupTree(
     restoreStatus: 'not-implemented',
   };
 
-  logVerbose(2, `Building node tree for ${packageNameUpper}`);
+  logVerbose(1, `Enriching objects for ${packageNameUpper}`);
   const enrichedRoot = await enrichTreeNode(rootTree, client, true);
 
-  logVerbose(2, `Collecting where-used dependencies for ${packageNameUpper}`);
+  logVerbose(1, `Collecting dependencies for ${packageNameUpper}`);
   await collectTreeDependencies(client, enrichedRoot);
 
   return {

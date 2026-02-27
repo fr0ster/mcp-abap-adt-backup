@@ -21,14 +21,30 @@ export function createLogger(level: number) {
       }
     },
     error: (message: string, meta?: unknown) => {
-      // Silence 404 errors as they are expected during verify/restore missing objects
-      if (meta && typeof meta === 'object' && (meta as any).status === 404) {
+      // Robust detection of "expected" missing object errors from ADT clients
+      const metaObj = meta && typeof meta === 'object' ? (meta as any) : {};
+      const fullMsg = (
+        message +
+        (metaObj.message || '') +
+        JSON.stringify(metaObj)
+      ).toLowerCase();
+
+      const isExpectedNotFound =
+        metaObj.status === 404 ||
+        metaObj.status === 410 ||
+        /not found/i.test(fullMsg) ||
+        /does not exist/i.test(fullMsg) ||
+        /ExceptionResourceNotFound/i.test(fullMsg) ||
+        (/failed for/i.test(fullMsg) && /404/i.test(fullMsg));
+
+      if (isExpectedNotFound) {
+        // Only show detailed ADT failures at maximum verbosity (-vvv)
         if (level >= 3) {
-          const formatted = formatLogMeta(meta);
-          console.log(message, formatted || '');
+          console.log(`[DEBUG] Object missing in system: ${message}`);
         }
         return;
       }
+
       const formatted = formatLogMeta(meta);
       console.error(message, formatted || '');
     },

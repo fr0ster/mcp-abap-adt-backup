@@ -8,8 +8,13 @@ import {
   EnvFileSessionStore,
 } from '@mcp-abap-adt/auth-stores';
 import type { SapConfig } from '@mcp-abap-adt/connection';
-import type { ITokenRefresher } from '@mcp-abap-adt/interfaces';
+import type {
+  IAuthorizationConfig,
+  IConfig,
+  ITokenRefresher,
+} from '@mcp-abap-adt/interfaces';
 import type { createLogger } from '../cli/createLogger';
+import { logVerbose } from '../cli/logVerbose';
 import { shouldEnableBrokerLogger } from '../cli/shouldEnableBrokerLogger';
 import { shouldEnableStoreLogger } from '../cli/shouldEnableStoreLogger';
 import { createTokenProvider } from './createTokenProvider';
@@ -25,8 +30,7 @@ export async function getSapConfigFromBroker(options: {
   const brokerLogger = shouldEnableBrokerLogger() ? logger : undefined;
   const storeLogger = shouldEnableStoreLogger() ? logger : undefined;
 
-  // 1. If --env-path is provided, we load it into process.env first (like in mcp-abap-adt-proxy)
-  // This ensures maximum compatibility with SAP_URL, SAP_JWT_TOKEN etc.
+  // 1. If --env-path is provided, we load it into process.env first
   if (options.envPath && fs.existsSync(options.envPath)) {
     const content = fs.readFileSync(options.envPath, 'utf8');
     const envVars = parseEnvContent(content);
@@ -38,33 +42,52 @@ export async function getSapConfigFromBroker(options: {
   const destination = options.destination || 'env';
   const roots = resolveAuthRoots(options.authRoot);
   const { sessionDir, serviceKeyDir } = resolveStoreDirs(roots, destination);
-  
-  // 2. Initialize stores - standard mcp-abap-adt behavior
-  // EnvFileSessionStore is still useful as it can handle token updates
-  const sessionStore = options.envPath 
+
+  // 2. Initialize stores
+  const sessionStore = options.envPath
     ? new EnvFileSessionStore(options.envPath, storeLogger)
     : new AbapSessionStore(sessionDir, storeLogger);
-    
+
   const serviceKeyStore = new AbapServiceKeyStore(serviceKeyDir, storeLogger);
 
   // 3. Get authorization config from store
-  const authConfig = await sessionStore.getAuthorizationConfig(destination) || 
-                    (serviceKeyStore ? await serviceKeyStore.getAuthorizationConfig(destination) : null);
+  const sessionAuthConfig = (await sessionStore.getAuthorizationConfig(
+    destination,
+  )) as IAuthorizationConfig | null;
+  const serviceKeyAuthConfig = (await serviceKeyStore.getAuthorizationConfig(
+    destination,
+  )) as IAuthorizationConfig | null;
+  const authConfig = sessionAuthConfig || serviceKeyAuthConfig;
 
   const broker = new AuthBroker(
     {
       sessionStore,
       serviceKeyStore,
-      tokenProvider: createTokenProvider(authConfig, options.browserAuthPort, logger),
+      tokenProvider: createTokenProvider(
+        authConfig,
+        options.browserAuthPort,
+        logger,
+      ),
     },
     undefined,
     brokerLogger,
   );
 
-  // 4. Try to get connection. If not found in stores, fallback to process.env (Standard MCP behavior)
-  let connection = await broker.getConnectionConfig(destination);
-  
-  if (!connection && (destination === 'env' || destination === 'SAP' || options.envPath)) {
+  // 4. Try to get connection.
+  let connection = (await broker.getConnectionConfig(destination)) as IConfig;
+
+  // Perform authentication if session is missing but auth config is available
+  if (!connection && authConfig && destination !== 'env') {
+    logVerbose(1, `Initiating authentication for ${destination}...`);
+    await broker.getToken(destination);
+    connection = (await broker.getConnectionConfig(destination)) as IConfig;
+  }
+
+  // Fallback to process.env if not found in stores
+  if (
+    !connection &&
+    (destination === 'env' || destination === 'SAP' || options.envPath)
+  ) {
     const url = process.env.SAP_URL || process.env.SAP_SERVICEURL;
     if (url) {
       connection = {
@@ -72,18 +95,36 @@ export async function getSapConfigFromBroker(options: {
         authorizationToken: process.env.SAP_JWT_TOKEN || process.env.SAP_TOKEN,
         username: process.env.SAP_USERNAME || process.env.SAP_USER,
         password: process.env.SAP_PASSWORD || process.env.SAP_PASS,
-        authType: (process.env.SAP_AUTH_TYPE || (process.env.SAP_JWT_TOKEN ? 'jwt' : 'basic')) as any,
+        authType: (process.env.SAP_AUTH_TYPE ||
+          (process.env.SAP_JWT_TOKEN ? 'jwt' : 'basic')) as any,
       } as any;
     }
   }
 
   if (!connection) {
-    throw new Error(`Missing connection config for destination ${destination}`);
+    throw new Error(
+      `Missing connection config for destination ${destination}. If using service keys, ensure the JSON file exists in ${serviceKeyDir}`,
+    );
   }
 
-  const resolvedAuthType = connection.authorizationToken ? 'jwt' : 
-                          (connection.username && connection.password ? 'basic' : 
-                          (authConfig && destination !== 'env' ? 'jwt' : connection.authType || 'basic'));
+  // If we have authConfig but no token in session, try to refresh/get it
+  if (
+    !connection.authorizationToken &&
+    !connection.username &&
+    authConfig &&
+    destination !== 'env'
+  ) {
+    await broker.getToken(destination);
+    connection = (await broker.getConnectionConfig(destination)) as IConfig;
+  }
+
+  const authType =
+    connection.authType ||
+    (connection.authorizationToken
+      ? 'jwt'
+      : connection.username && connection.password
+        ? 'basic'
+        : 'jwt');
 
   const serviceUrl = connection.serviceUrl;
   if (!serviceUrl) {
@@ -92,17 +133,18 @@ export async function getSapConfigFromBroker(options: {
 
   const config: SapConfig = {
     url: serviceUrl,
-    authType: resolvedAuthType as any,
+    authType: authType as any,
   };
 
-  if (resolvedAuthType === 'jwt') {
+  if (authType === 'jwt') {
     config.jwtToken = connection.authorizationToken;
   } else {
     config.username = connection.username;
     config.password = connection.password;
   }
 
-  const tokenRefresher = resolvedAuthType === 'jwt' ? broker.createTokenRefresher(destination) : undefined;
+  const tokenRefresher =
+    authType === 'jwt' ? broker.createTokenRefresher(destination) : undefined;
 
   return { config, tokenRefresher };
 }
@@ -164,70 +206,4 @@ function resolveStoreDirs(
   }
 
   return candidates[0];
-}
-
-async function getConfigWithStores(options: {
-  destination: string;
-  sessionStore: AbapSessionStore | EnvFileSessionStore;
-  serviceKeyStore?: AbapServiceKeyStore;
-  browserAuthPort?: number;
-  logger: ReturnType<typeof createLogger>;
-  brokerLogger?: ReturnType<typeof createLogger>;
-}): Promise<{ config: SapConfig; tokenRefresher?: ITokenRefresher }> {
-  const {
-    destination,
-    sessionStore,
-    serviceKeyStore,
-    browserAuthPort,
-    logger,
-    brokerLogger,
-  } = options;
-
-  const authConfig = await sessionStore.getAuthorizationConfig(destination) || 
-                    (serviceKeyStore ? await serviceKeyStore.getAuthorizationConfig(destination) : null);
-
-  const broker = new AuthBroker(
-    {
-      sessionStore,
-      serviceKeyStore,
-      tokenProvider: createTokenProvider(authConfig, browserAuthPort, logger),
-    },
-    undefined,
-    brokerLogger,
-  );
-
-  let connection = await broker.getConnectionConfig(destination);
-  if (!connection && authConfig && destination !== 'env') {
-    await broker.getToken(destination);
-    connection = await broker.getConnectionConfig(destination);
-  }
-
-  if (!connection) {
-    throw new Error(`Missing connection config for destination ${destination}`);
-  }
-
-  const resolvedAuthType = connection.authorizationToken ? 'jwt' : 
-                          (connection.username && connection.password ? 'basic' : 
-                          (authConfig && destination !== 'env' ? 'jwt' : connection.authType || 'basic'));
-
-  const serviceUrl = connection.serviceUrl;
-  if (!serviceUrl) {
-    throw new Error(`Missing service URL for destination ${destination}`);
-  }
-
-  const config: SapConfig = {
-    url: serviceUrl,
-    authType: resolvedAuthType as any,
-  };
-
-  if (resolvedAuthType === 'jwt') {
-    config.jwtToken = connection.authorizationToken;
-  } else {
-    config.username = connection.username;
-    config.password = connection.password;
-  }
-
-  const tokenRefresher = resolvedAuthType === 'jwt' ? broker.createTokenRefresher(destination) : undefined;
-
-  return { config, tokenRefresher };
 }

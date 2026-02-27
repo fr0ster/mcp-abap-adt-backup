@@ -63,6 +63,9 @@ export function applyConfigName(
     case 'enhancement':
       finalConfig.enhancementName = name;
       break;
+    case 'accessControl':
+      finalConfig.accessControlName = name;
+      break;
     case 'unitTest':
       finalConfig.className = name;
       break;

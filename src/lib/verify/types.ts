@@ -29,4 +29,7 @@ export interface VerifySummary {
   unsupported: number;
   error: number;
   conflicts: number;
+  create?: number;
+  update?: number;
+  skip?: number;
 }

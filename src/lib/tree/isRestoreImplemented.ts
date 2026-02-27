@@ -20,6 +20,7 @@ export function isRestoreImplemented(type?: SupportedType): boolean {
     case 'behaviorDefinition':
     case 'behaviorImplementation':
     case 'enhancement':
+    case 'accessControl':
       return true;
     default:
       return false;

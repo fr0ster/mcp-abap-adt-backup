@@ -22,6 +22,7 @@ export async function readPayloadForType(
     case 'behaviorDefinition':
     case 'behaviorImplementation':
     case 'enhancement':
+    case 'accessControl':
     case 'tableType': {
       const payload = await readSourceText(client, {
         type,

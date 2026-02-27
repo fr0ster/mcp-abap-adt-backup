@@ -94,6 +94,17 @@ export async function buildConfigForNode(
         description,
       } as BackupConfig);
     }
+    case 'accessControl': {
+      if (!metadataXml) {
+        return undefined;
+      }
+      const { description, packageName } = extractMetadata(metadataXml);
+      return applyConfigName(type, name, functionGroupName, {
+        accessControlName: name,
+        packageName,
+        description,
+      } as BackupConfig);
+    }
     case 'serviceBinding': {
       if (!metadataXml) {
         return undefined;

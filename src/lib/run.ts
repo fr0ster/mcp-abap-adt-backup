@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import type { ObjectReference } from '@mcp-abap-adt/adt-clients';
 import { AdtClient } from '@mcp-abap-adt/adt-clients';
 import { createAbapConnection } from '@mcp-abap-adt/connection';
 import YAML from 'yaml';
@@ -12,7 +13,6 @@ import { createLogger } from './cli/createLogger';
 import { getVerbosity } from './cli/getVerbosity';
 import { logVerbose } from './cli/logVerbose';
 import { parseArgs } from './cli/parseArgs';
-import { redactText, safeStringify } from './cli/redact';
 import { shouldEnableAdtLogger } from './cli/shouldEnableAdtLogger';
 import { shouldEnableConnectionLogger } from './cli/shouldEnableConnectionLogger';
 import { usage } from './cli/usage';
@@ -23,30 +23,26 @@ import { encodeBase64 } from './crypto/encodeBase64';
 import { updateTreeChecksums } from './crypto/updateTreeChecksums';
 import { verifyBackupChecksum } from './crypto/verifyBackupChecksum';
 import { verifyTreeChecksums } from './crypto/verifyTreeChecksums';
-import { buildRestorePlan } from './restore/buildRestorePlan';
-import { deleteBackupObjects } from './restore/deleteBackupObjects';
-import { restoreObjects } from './restore/restoreObjects';
+import { collectTreeDependencies } from './dependencies/collectTreeDependencies';
+import { analyzeDependencies } from './restore/analyzeDependencies';
 import { restoreTreeBackup } from './restore/restoreTreeBackup';
 import { verbosityState } from './state/verbosity';
 import { buildPackageBackupTree } from './tree/buildPackageBackupTree';
-import { buildTreeList } from './tree/buildTreeList';
-import { collectTreeObjects } from './tree/collectTreeObjects';
+import { enrichTreeNode } from './tree/enrichTreeNode';
 import { findNodeInTree } from './tree/findNodeInTree';
-import { formatTreeListText } from './tree/formatTreeListText';
-import { getNodeObjectSpec } from './tree/getNodeObjectSpec';
+import { flattenTree } from './tree/flattenTree';
+import { getNodeObjectId } from './tree/getNodeObjectId';
 import type {
   BackupFile,
   BackupObject,
   BackupTreeFile,
   BackupTreeNode,
-  ObjectSpec,
   RestoreMode,
+  RestorePlan,
 } from './types';
 import { diffUnified } from './utils/diffUnified';
 import { formatObjectSpec } from './utils/formatObjectSpec';
 import { parseObjectSpec } from './utils/parseObjectSpec';
-import { collectBackupNodes } from './verify/collectBackupNodes';
-import { findOtherType } from './verify/findOtherType';
 import { formatVerifyResultsText } from './verify/formatVerifyResultsText';
 import { verifyBackup } from './verify/verifyBackup';
 import { extractMetadata } from './xml/extractMetadata';
@@ -55,9 +51,7 @@ export async function run(): Promise<void> {
   const argv = process.argv.slice(2);
   const args = parseArgs(argv.slice(1));
   verbosityState.level =
-    typeof args.verbosity === 'number'
-      ? args.verbosity
-      : getVerbosity(argv);
+    typeof args.verbosity === 'number' ? args.verbosity : getVerbosity(argv);
   const logger = createLogger(verbosityState.level);
   const command = argv[0];
   const logFile = typeof args['log-file'] === 'string' ? args['log-file'] : '';
@@ -87,208 +81,10 @@ export async function run(): Promise<void> {
     process.exit(0);
   }
 
-  if (command === 'extract') {
-    const input = args.input;
-    const objectSpec = args.object;
-    const output = args.out;
-    if (typeof input !== 'string') {
-      throw new Error('Missing --input');
-    }
-    if (typeof objectSpec !== 'string') {
-      throw new Error('Missing --object');
-    }
-    if (typeof output !== 'string') {
-      throw new Error('Missing --out');
-    }
-    logVerbose(2, `Extracting ${objectSpec} from ${input}`);
-    const raw = fs.readFileSync(input, 'utf8');
-    const parsed = YAML.parse(raw) as BackupTreeFile;
-    if (!parsed || parsed.schemaVersion !== 2) {
-      throw new Error('Extract supports only schemaVersion 2 backups');
-    }
-    verifyBackupChecksum(parsed);
-    verifyTreeChecksums(parsed.root);
-    const spec = parseObjectSpec(objectSpec);
-    logVerbose(3, `Parsed object spec: ${spec.type}:${spec.name}`);
-    const node = findNodeInTree(parsed.root, spec);
-    if (!node || !node.codeBase64) {
-      throw new Error('Object not found or no codeBase64 in backup');
-    }
-    fs.writeFileSync(output, decodeBase64(node.codeBase64), 'utf8');
-    console.log(`Extracted to ${output}`);
-    return;
-  }
-
-  if (command === 'list') {
-    const input = args.input;
-    if (typeof input !== 'string') {
-      throw new Error('Missing --input');
-    }
-    const format = typeof args.format === 'string' ? args.format : 'text';
-    const flat = Boolean(args.flat);
-    const showDeps = Boolean(args.deps);
-    const raw = fs.readFileSync(input, 'utf8');
-    const parsed = YAML.parse(raw) as BackupFile | BackupTreeFile;
-    if (!parsed || typeof parsed !== 'object') {
-      throw new Error('Invalid backup file format');
-    }
-
-    if ((parsed as BackupTreeFile).schemaVersion === 2) {
-      const tree = parsed as BackupTreeFile;
-      if (flat) {
-        const objects: ObjectSpec[] = [];
-        collectTreeObjects(tree.root, objects);
-        if (format === 'json') {
-          console.log(JSON.stringify(objects, null, 2));
-        } else {
-          for (const spec of objects) {
-            console.log(formatObjectSpec(spec));
-          }
-        }
-        return;
-      }
-      if (format === 'json') {
-        console.log(
-          JSON.stringify(buildTreeList(tree.root, { showDeps }), null, 2),
-        );
-      } else {
-        const lines = formatTreeListText(tree.root, 0, { showDeps });
-        console.log(lines.join('\n'));
-      }
-      return;
-    }
-
-    if ((parsed as BackupFile).schemaVersion === 1) {
-      const flat = parsed as BackupFile;
-      const objects = flat.objects.map((obj) => ({
-        type: obj.type,
-        name: obj.name,
-        functionGroupName: obj.functionGroupName,
-      }));
-      if (format === 'json') {
-        console.log(JSON.stringify(objects, null, 2));
-      } else {
-        for (const spec of objects) {
-          console.log(formatObjectSpec(spec));
-        }
-      }
-      return;
-    }
-
-    throw new Error('Invalid backup file format');
-  }
-
-  if (command === 'patch') {
-    const input = args.input;
-    const objectSpec = args.object;
-    const filePath = args.file;
-    if (typeof input !== 'string') {
-      throw new Error('Missing --input');
-    }
-    if (typeof objectSpec !== 'string') {
-      throw new Error('Missing --object');
-    }
-    if (typeof filePath !== 'string') {
-      throw new Error('Missing --file');
-    }
-    const output = typeof args.output === 'string' ? args.output : input;
-    logVerbose(2, `Patching ${objectSpec} in ${input}`);
-    const raw = fs.readFileSync(input, 'utf8');
-    const parsed = YAML.parse(raw) as BackupTreeFile;
-    if (!parsed || parsed.schemaVersion !== 2) {
-      throw new Error('Patch supports only schemaVersion 2 backups');
-    }
-    verifyBackupChecksum(parsed);
-    verifyTreeChecksums(parsed.root);
-    const spec = parseObjectSpec(objectSpec);
-    logVerbose(3, `Parsed object spec: ${spec.type}:${spec.name}`);
-    const node = findNodeInTree(parsed.root, spec);
-    if (!node) {
-      throw new Error('Object not found in backup');
-    }
-    const fileContent = fs.readFileSync(filePath, 'utf8');
-    node.codeBase64 = encodeBase64(fileContent);
-    node.codeChecksum = undefined;
-    node.restoreStatus = 'ok';
-    if (!node.codeFormat) {
-      node.codeFormat = 'source';
-    }
-    updateTreeChecksums(parsed.root);
-    parsed.checksum = computeBackupChecksum(parsed);
-    const yamlText = YAML.stringify(parsed, { lineWidth: 0 });
-    fs.writeFileSync(output as string, yamlText, 'utf8');
-    console.log(`Backup updated at ${output}`);
-    return;
-  }
-
-  if (command === 'validate') {
-    const input = args.input;
-    const objectSpec = args.object;
-    if (typeof input !== 'string') {
-      throw new Error('Missing --input');
-    }
-    const raw = fs.readFileSync(input, 'utf8');
-    const parsed = YAML.parse(raw) as BackupFile | BackupTreeFile;
-    if (!parsed || typeof parsed !== 'object') {
-      throw new Error('Invalid backup file format');
-    }
-
-    verifyBackupChecksum(parsed);
-
-    if ((parsed as BackupTreeFile).schemaVersion === 2) {
-      const tree = parsed as BackupTreeFile;
-      if (typeof objectSpec === 'string') {
-        const spec = parseObjectSpec(objectSpec);
-        const node = findNodeInTree(tree.root, spec);
-        if (!node) {
-          throw new Error(`Object not found: ${formatObjectSpec(spec)}`);
-        }
-        if (!node.codeBase64) {
-          throw new Error('Object has no codeBase64 to validate');
-        }
-        if (!node.codeChecksum) {
-          throw new Error('Object has no codeChecksum to validate');
-        }
-        const expected = computeCodeChecksum(node.codeBase64);
-        if (expected !== node.codeChecksum) {
-          throw new Error('Object code checksum mismatch');
-        }
-        console.log(`Validated object ${formatObjectSpec(spec)}`);
-      } else {
-        verifyTreeChecksums(tree.root);
-        console.log('Backup validated');
-      }
-      return;
-    }
-
-    if ((parsed as BackupFile).schemaVersion === 1) {
-      if (typeof objectSpec === 'string') {
-        const spec = parseObjectSpec(objectSpec);
-        const flat = parsed as BackupFile;
-        const matches = flat.objects.some(
-          (obj) =>
-            obj.type === spec.type &&
-            obj.name === spec.name &&
-            (spec.functionGroupName
-              ? obj.functionGroupName === spec.functionGroupName
-              : true),
-        );
-        if (!matches) {
-          throw new Error(`Object not found: ${formatObjectSpec(spec)}`);
-        }
-        console.log(`Validated object ${formatObjectSpec(spec)}`);
-      } else {
-        console.log('Backup validated');
-      }
-      return;
-    }
-
-    throw new Error('Invalid backup file format');
-  }
-
   const isMcp = Boolean(args.mcp);
   const isEnv = Boolean(args.env);
-  const envPathArg = typeof args['env-path'] === 'string' ? args['env-path'] : undefined;
+  const envPathArg =
+    typeof args['env-path'] === 'string' ? args['env-path'] : undefined;
 
   let destination: string | undefined;
   let envPath: string | undefined;
@@ -301,139 +97,466 @@ export async function run(): Promise<void> {
   } else if (isMcp) {
     destination = 'SAP';
   } else {
-    destination = typeof args.destination === 'string' ? args.destination : undefined;
+    destination =
+      typeof args.destination === 'string'
+        ? args.destination
+        : typeof args.target === 'string'
+          ? args.target
+          : undefined;
   }
-  const authRoot =
-    typeof args['auth-root'] === 'string' ? args['auth-root'] : undefined;
-  const browserAuthPortStr =
-    typeof args['browser-auth-port'] === 'string'
-      ? args['browser-auth-port']
-      : undefined;
-  const browserAuthPort = browserAuthPortStr
-    ? Number.parseInt(browserAuthPortStr, 10)
-    : 10001;
 
-  if (!envPath && !destination) {
-    throw new Error('Missing --destination (or provide --env)');
+  // Authentication logic
+  const needsAuth = [
+    'tree',
+    'enrich',
+    'backup',
+    'diff',
+    'check',
+    'verify',
+    'restore',
+    'activate',
+  ].includes(command);
+  const canUseAuth = command === 'plan';
+
+  let client: AdtClient | undefined;
+
+  if (needsAuth || (canUseAuth && (envPath || destination))) {
+    if (needsAuth && !envPath && !destination) {
+      throw new Error(
+        `Command "${command}" requires a TARGET system. Provide --target, --env or --env-path.`,
+      );
+    }
+
+    if (envPath || destination) {
+      logVerbose(1, `Connecting to system: ${destination || envPath}...`);
+
+      const sapAuth = await getSapConfigFromBroker({
+        destination,
+        envPath,
+        authRoot:
+          typeof args['auth-root'] === 'string' ? args['auth-root'] : undefined,
+        browserAuthPort:
+          typeof args['browser-auth-port'] === 'string'
+            ? Number.parseInt(args['browser-auth-port'], 10)
+            : 10001,
+        logger,
+      });
+
+      const allowAdtLogs =
+        verbosityState.level >= 3 || Boolean(args['debug-adt']);
+      const allowConnectionLogs =
+        verbosityState.level >= 3 || Boolean(args['debug-adt']);
+      const connectionLogger =
+        allowConnectionLogs && shouldEnableConnectionLogger()
+          ? logger
+          : undefined;
+      const adtLogger =
+        command !== 'verify' &&
+        command !== 'restore' &&
+        allowAdtLogs &&
+        shouldEnableAdtLogger()
+          ? logger
+          : undefined;
+
+      const connection = createAbapConnection(
+        sapAuth.config,
+        connectionLogger,
+        undefined,
+        sapAuth.tokenRefresher,
+      );
+      client = new AdtClient(connection, adtLogger);
+    }
   }
-  const { config, tokenRefresher } = await getSapConfigFromBroker({
-    destination,
-    envPath,
-    authRoot,
-    browserAuthPort,
-    logger,
-  });
-  const allowAdtLogs = verbosityState.level >= 2 || debugAdt;
-  const allowConnectionLogs = verbosityState.level >= 3 || debugAdt;
-  const connectionLogger =
-    allowConnectionLogs && shouldEnableConnectionLogger() ? logger : undefined;
-  const adtLogger =
-    allowAdtLogs && shouldEnableAdtLogger() ? logger : undefined;
-  const connection = createAbapConnection(
-    config,
-    connectionLogger,
-    undefined,
-    tokenRefresher,
-  );
-  const client = new AdtClient(connection, adtLogger);
 
-  if (command === 'backup') {
-    const rawObjects = args.objects;
+  if (command === 'tree') {
+    if (!client) throw new Error('Client required');
     const packageName =
       typeof args.package === 'string' ? args.package : undefined;
+    if (!packageName) throw new Error('Missing --package');
+    const output = typeof args.output === 'string' ? args.output : 'tree.yaml';
+
+    logVerbose(1, `Fetching package hierarchy for ${packageName}`);
+    const hierarchy = await client
+      .getUtils()
+      .getPackageHierarchy(packageName.toUpperCase());
+    const rootTree: BackupTreeNode = { ...hierarchy, restoreStatus: 'ok' };
+    const enrichedRoot = await enrichTreeNode(rootTree, client, false);
+    await collectTreeDependencies(client, enrichedRoot);
+
+    const payload: BackupTreeFile = {
+      schemaVersion: 2,
+      generatedAt: new Date().toISOString(),
+      package: packageName.toUpperCase(),
+      root: enrichedRoot,
+    };
+    payload.checksum = computeBackupChecksum(payload);
+    fs.writeFileSync(output, YAML.stringify(payload, { lineWidth: 0 }), 'utf8');
+    console.log(`Tree written to ${output}`);
+    console.log(
+      `Next step: adt-backup enrich --input ${output} --output backup.yaml --target ${destination || '<sys>'}`,
+    );
+    return;
+  }
+
+  if (command === 'backup') {
+    if (!client) throw new Error('Client required');
+    const packageName =
+      typeof args.package === 'string' ? args.package : undefined;
+    const rawObjects = args.objects;
+    const output =
+      typeof args.output === 'string' ? args.output : 'backup.yaml';
 
     if (packageName) {
-      logVerbose(2, `Starting package backup for ${packageName}`);
-      const output =
-        typeof args.output === 'string' ? args.output : 'backup.yaml';
       const tree = await buildPackageBackupTree(client, packageName);
       updateTreeChecksums(tree.root);
       tree.checksum = computeBackupChecksum(tree);
-      const yamlText = YAML.stringify(tree, { lineWidth: 0 });
-      fs.writeFileSync(output, yamlText, 'utf8');
+      fs.writeFileSync(output, YAML.stringify(tree, { lineWidth: 0 }), 'utf8');
       console.log(`Backup written to ${output}`);
+      console.log(
+        `Next step: adt-backup plan --input ${output} --output plan.yaml`,
+      );
       return;
     }
 
-    if (typeof rawObjects !== 'string') {
+    if (typeof rawObjects !== 'string')
       throw new Error('Missing --objects or --package');
-    }
-    logVerbose(2, `Starting objects backup (${rawObjects})`);
     const specs = rawObjects
       .split(',')
-      .map((spec) => spec.trim())
+      .map((s) => s.trim())
       .filter(Boolean)
       .map(parseObjectSpec);
-
     const objects: BackupObject[] = [];
     for (const spec of specs) {
-      logVerbose(3, `Backup ${spec.type}:${spec.name}`);
-      const backup = await backupObject(client, spec);
-      objects.push(backup);
+      objects.push(await backupObject(client, spec));
     }
-
-    const output =
-      typeof args.output === 'string' ? args.output : 'backup.yaml';
     const payload: BackupFile = {
       schemaVersion: 1,
       generatedAt: new Date().toISOString(),
       objects,
     };
     payload.checksum = computeBackupChecksum(payload);
-    const yamlText = YAML.stringify(payload, { lineWidth: 0 });
-    fs.writeFileSync(output, yamlText, 'utf8');
+    fs.writeFileSync(output, YAML.stringify(payload, { lineWidth: 0 }), 'utf8');
     console.log(`Backup written to ${output}`);
     return;
   }
 
+  if (command === 'enrich') {
+    if (!client) throw new Error('Client required');
+    const input = args.input;
+    if (typeof input !== 'string') throw new Error('Missing --input');
+    const output = typeof args.output === 'string' ? args.output : input;
+
+    const backup = YAML.parse(fs.readFileSync(input, 'utf8')) as BackupTreeFile;
+    backup.root = await enrichTreeNode(backup.root, client, true);
+    updateTreeChecksums(backup.root);
+    backup.checksum = computeBackupChecksum(backup);
+    fs.writeFileSync(output, YAML.stringify(backup, { lineWidth: 0 }), 'utf8');
+    console.log(`Enriched backup written to ${output}`);
+    console.log(
+      `Next step: adt-backup plan --input ${output} --output plan.yaml`,
+    );
+    return;
+  }
+
+  if (command === 'plan') {
+    const input = args.input;
+    if (typeof input !== 'string') throw new Error('Missing --input');
+    const output = typeof args.output === 'string' ? args.output : 'plan.yaml';
+    const mode = (args.mode as RestoreMode) || 'create';
+
+    logVerbose(1, `Planning restoration from ${input} (offline)...`);
+    const backup = YAML.parse(fs.readFileSync(input, 'utf8')) as BackupTreeFile;
+    if (!backup || backup.schemaVersion !== 2)
+      throw new Error('SchemaVersion 2 required');
+
+    const allNodes = flattenTree(backup.root).filter(
+      (n: BackupTreeNode) => n.type && n.restoreStatus === 'ok',
+    );
+    const packageNodes = allNodes.filter(
+      (n: BackupTreeNode) => n.type === 'package',
+    );
+    const nonPackageNodes = allNodes.filter(
+      (n: BackupTreeNode) => n.type !== 'package',
+    );
+    const groups = analyzeDependencies(nonPackageNodes);
+
+    const plan: RestorePlan = {
+      schemaVersion: 1,
+      generatedAt: new Date().toISOString(),
+      backupFile: path.resolve(input),
+      targetPackage: backup.package,
+      groups: [
+        {
+          id: 0,
+          isCircular: false,
+          actions: packageNodes.map((node: BackupTreeNode) => ({
+            id: getNodeObjectId(node)!,
+            type: node.type!,
+            name: node.name,
+            action: mode as any,
+            adtType: node.adtType,
+          })),
+        },
+        ...groups.map((group, idx) => ({
+          id: idx + 1,
+          isCircular: group.isCircular,
+          actions: group.nodes.map((node: BackupTreeNode) => ({
+            id: getNodeObjectId(node)!,
+            type: node.type!,
+            name: node.name,
+            functionGroupName: node.functionGroupName,
+            action: mode as any,
+            adtType: node.adtType,
+          })),
+        })),
+      ],
+    };
+
+    fs.writeFileSync(output, YAML.stringify(plan, { lineWidth: 0 }), 'utf8');
+    console.log(`Plan written to ${output}`);
+    console.log(
+      `Next step: adt-backup verify --plan ${output} --target ${destination || '<sys>'}`,
+    );
+    return;
+  }
+
+  if (command === 'verify') {
+    if (!client) throw new Error('Client required');
+    const planPath = args.plan;
+    if (!planPath || typeof planPath !== 'string')
+      throw new Error('Missing --plan');
+    const output = typeof args.output === 'string' ? args.output : planPath;
+
+    const plan = YAML.parse(fs.readFileSync(planPath, 'utf8')) as RestorePlan;
+    const backup = YAML.parse(
+      fs.readFileSync(plan.backupFile, 'utf8'),
+    ) as BackupTreeFile;
+
+    const verifyResult = await verifyBackup(client, backup, {
+      mode: 'pre-restore',
+    });
+    const systemState = new Map<string, string>();
+    for (const entry of verifyResult.entries) {
+      systemState.set(`${entry.type}:${entry.name}`, entry.status);
+    }
+
+    const skipExisting = Boolean(args['skip-existing']);
+
+    for (const group of plan.groups) {
+      for (const action of group.actions) {
+        const id = `${action.type}:${action.name}`;
+        const status = systemState.get(id);
+        if (
+          status === 'ok' ||
+          status === 'package-mismatch' ||
+          status === 'source-mismatch'
+        ) {
+          action.action = skipExisting ? 'skip' : 'update';
+        } else {
+          action.action = 'create';
+        }
+      }
+    }
+
+    fs.writeFileSync(output, YAML.stringify(plan, { lineWidth: 0 }), 'utf8');
+    const skipActions = plan.groups
+      .flatMap((g) => g.actions)
+      .filter((a) => a.action === 'skip');
+    const skipCount = skipActions.length;
+    const skipIdSet = new Set(skipActions.map((a) => `${a.type}:${a.name}`));
+    if (skipExisting && skipCount > 0) {
+      verifyResult.summary.skip = skipCount;
+      verifyResult.summary.update =
+        (verifyResult.summary.update ?? 0) - skipCount;
+    }
+    console.log(
+      formatVerifyResultsText(
+        verifyResult.entries,
+        verifyResult.summary,
+        'pre-restore',
+        verbosityState.level,
+        skipIdSet.size > 0 ? skipIdSet : undefined,
+      ),
+    );
+    if (skipCount > 0) {
+      console.log(`  (${skipCount} existing objects will be skipped)`);
+    }
+    console.log(`Plan updated and saved to ${output}`);
+    console.log(
+      `Next step: adt-backup restore --plan ${output} --target ${destination || '<sys>'}`,
+    );
+    return;
+  }
+
+  if (command === 'restore') {
+    if (!client) throw new Error('Client required');
+    const planPath = args.plan;
+    if (!planPath || typeof planPath !== 'string')
+      throw new Error('Missing --plan');
+
+    const plan = YAML.parse(fs.readFileSync(planPath, 'utf8')) as RestorePlan;
+    const backup = YAML.parse(
+      fs.readFileSync(plan.backupFile, 'utf8'),
+    ) as BackupTreeFile;
+    const allNodes = flattenTree(backup.root);
+    const _nodeMap = new Map(allNodes.map((n) => [getNodeObjectId(n)!, n]));
+    const _backupPackageNames = new Set(
+      allNodes.filter((n) => n.type === 'package').map((n) => n.name),
+    );
+
+    const noActivate = Boolean(args['no-activate']);
+    const activate =
+      !noActivate && (Boolean(args.activate) || !args['no-activate-on-update']);
+    const activateOnCreate = !noActivate && !args['no-activate-on-create'];
+    const superPackage =
+      typeof args['super-package'] === 'string'
+        ? args['super-package']
+        : undefined;
+    const transportLayer =
+      typeof args['transport-layer'] === 'string'
+        ? args['transport-layer']
+        : undefined;
+
+    await restoreTreeBackup(
+      client,
+      backup.root,
+      'upsert',
+      activate,
+      typeof args.transport === 'string' ? args.transport : undefined,
+      undefined,
+      new Map(
+        plan.groups
+          .flatMap((g) => g.actions)
+          .map((a) => [a.id, a.action as any]),
+      ),
+      activateOnCreate,
+      typeof args['software-component'] === 'string'
+        ? args['software-component']
+        : undefined,
+      superPackage,
+      transportLayer,
+    );
+
+    console.log(
+      'Restore completed. Running post-restore check on TARGET system...',
+    );
+    const postResult = await verifyBackup(client, backup, {
+      mode: 'post-restore',
+    });
+    console.log(
+      formatVerifyResultsText(
+        postResult.entries,
+        postResult.summary,
+        'post-restore',
+        verbosityState.level,
+      ),
+    );
+    return;
+  }
+
+  if (command === 'activate') {
+    if (!client) throw new Error('Client required');
+    const planPath = args.plan;
+    if (!planPath || typeof planPath !== 'string')
+      throw new Error('Missing --plan');
+
+    const filter = typeof args.filter === 'string' ? args.filter : 'all';
+    if (!['skip', 'update', 'all'].includes(filter)) {
+      throw new Error(
+        `Invalid --filter value: "${filter}". Must be skip, update, or all.`,
+      );
+    }
+
+    const plan = YAML.parse(fs.readFileSync(planPath, 'utf8')) as RestorePlan;
+    const allActions = plan.groups.flatMap((g) => g.actions);
+
+    const filtered = allActions.filter((a) => {
+      if (a.type === 'package') return false;
+      if (!a.adtType) return false;
+      if (filter === 'all') return a.action !== 'create';
+      return a.action === filter;
+    });
+
+    if (filtered.length === 0) {
+      console.log('No objects to activate.');
+      return;
+    }
+
+    console.log(
+      `Activating ${filtered.length} object(s) (filter: ${filter})...`,
+    );
+
+    // Group by plan groups to respect dependency order
+    let activated = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const group of plan.groups) {
+      const groupRefs: ObjectReference[] = [];
+      for (const action of group.actions) {
+        if (action.type === 'package' || !action.adtType) continue;
+        if (filter !== 'all' && action.action !== filter) continue;
+        if (filter === 'all' && action.action === 'create') continue;
+        groupRefs.push({ name: action.name, type: action.adtType });
+      }
+
+      if (groupRefs.length === 0) continue;
+
+      logVerbose(
+        2,
+        `  [GROUP ${group.id}] Activating ${groupRefs.length} object(s)...`,
+      );
+
+      try {
+        await client.getUtils().activateObjectsGroup(groupRefs, true);
+        activated += groupRefs.length;
+        for (const ref of groupRefs) {
+          logVerbose(2, `    OK ${ref.type} ${ref.name}`);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        failed += groupRefs.length;
+        logVerbose(1, `  [!] Group ${group.id} activation failed: ${message}`);
+      }
+    }
+
+    skipped = allActions.length - activated - failed;
+    console.log(
+      `Activation complete: ${activated} activated, ${skipped} skipped, ${failed} failed`,
+    );
+    return;
+  }
+
   if (command === 'diff') {
+    if (!client) throw new Error('Client required');
     const input = args.input;
     const objectSpec = args.object;
     const diffAll = Boolean(args.all);
-    const showOk = Boolean(args['show-ok']);
+    const _showOk = Boolean(args['show-ok']);
     const objectSpecValue = typeof objectSpec === 'string' ? objectSpec : '';
-    if (typeof input !== 'string') {
-      throw new Error('Missing --input');
-    }
-    if (!diffAll && typeof objectSpec !== 'string') {
-      throw new Error('Missing --object (or use --all)');
-    }
+    if (typeof input !== 'string') throw new Error('Missing --input');
+    if (!diffAll && typeof objectSpec !== 'string')
+      throw new Error('Missing --object');
+
     const raw = fs.readFileSync(input, 'utf8');
     const parsed = YAML.parse(raw) as BackupFile | BackupTreeFile;
-    if (!parsed || typeof parsed !== 'object') {
-      throw new Error('Invalid backup file format');
-    }
     verifyBackupChecksum(parsed);
+
     const diffMetadata = async (
       label: string,
       backupText: string,
       metadataXml: string,
       showNoDiff: boolean,
-    ): Promise<boolean> => {
+    ) => {
       const beforeMeta = extractMetadata(backupText);
       const afterMeta = extractMetadata(metadataXml);
-      const changes: Array<{ key: string; before?: string; after?: string }> =
-        [];
-      if (beforeMeta.packageName !== afterMeta.packageName) {
-        changes.push({
-          key: 'packageName',
-          before: beforeMeta.packageName,
-          after: afterMeta.packageName,
-        });
-      }
-      if (changes.length === 0) {
-        if (showNoDiff) {
-          console.log(`=== ${label}`);
-          console.log('No differences');
-        }
+      if (beforeMeta.packageName === afterMeta.packageName) {
+        if (showNoDiff) console.log(`=== ${label}\nNo differences`);
         return false;
       }
-      console.log(`=== ${label}`);
-      for (const change of changes) {
-        console.log(
-          `changed ${change.key}: "${change.before ?? ''}" -> "${change.after ?? ''}"`,
-        );
-      }
+      console.log(
+        `=== ${label}\nchanged packageName: "${beforeMeta.packageName ?? ''}" -> "${afterMeta.packageName ?? ''}"`,
+      );
       return true;
     };
 
@@ -442,498 +565,128 @@ export async function run(): Promise<void> {
       backupText: string,
       actualSource: string,
       showNoDiff: boolean,
-    ): Promise<boolean> => {
+    ) => {
       const unified = diffUnified(backupText, actualSource);
       if (!unified.trim()) {
-        if (showNoDiff) {
-          console.log(`=== ${label}`);
-          console.log('No differences');
-        }
+        if (showNoDiff) console.log(`=== ${label}\nNo differences`);
         return false;
       }
-      console.log(`=== ${label}`);
-      console.log(unified);
+      console.log(`=== ${label}\n${unified}`);
       return true;
     };
 
-    let hasAnyDiff = false;
-
-    if ((parsed as BackupTreeFile).schemaVersion === 2) {
-      const tree = parsed as BackupTreeFile;
-      verifyTreeChecksums(tree.root);
+    if (parsed.schemaVersion === 2) {
+      verifyTreeChecksums(parsed.root);
       if (!diffAll) {
         const spec = parseObjectSpec(objectSpecValue);
-        const node = findNodeInTree(tree.root, spec);
-        if (!node || !node.type) {
-          throw new Error(`Object not found: ${formatObjectSpec(spec)}`);
-        }
-        if (!node.codeBase64) {
-          throw new Error('Object has no payload to diff');
-        }
-        const label = formatObjectSpec(spec);
+        const node = findNodeInTree(parsed.root, spec);
+        if (!node || !node.codeBase64) throw new Error('Object not found');
         const backupText = decodeBase64(node.codeBase64);
         if (node.codeFormat === 'xml') {
-          try {
-            const metadataXml = await readMetadataXmlForType(
-              client,
-              node.type,
-              node.name,
-              node.functionGroupName,
-            );
-            if (!metadataXml) {
-              throw new Error('Metadata not available for diff');
-            }
-            const hasDiff = await diffMetadata(
-              label,
+          const metadataXml = await readMetadataXmlForType(
+            client,
+            node.type!,
+            node.name,
+            node.functionGroupName,
+          );
+          if (metadataXml)
+            await diffMetadata(
+              formatObjectSpec(spec),
               backupText,
               metadataXml,
               true,
             );
-            if (!hasDiff) {
-              console.log('No metadata differences detected');
-            }
-            return;
-          } catch (_error) {
-            const otherType = await findOtherType(client, node.type, node.name);
-            if (otherType && otherType !== node.type) {
-              console.log(`=== ${label}`);
-              console.log(`changed type: "${node.type}" -> "${otherType}"`);
-              return;
-            }
-            throw _error;
-          }
-        }
-        const actualSource = await readSourceText(client, {
-          type: node.type,
-          name: node.name,
-          functionGroupName: node.functionGroupName,
-        });
-        if (actualSource === undefined) {
-          throw new Error('Source not available for diff');
-        }
-        const hasDiff = await diffSource(label, backupText, actualSource ?? '', true);
-        if (!hasDiff) {
-          console.log('No source differences detected');
+        } else {
+          const actualSource = await readSourceText(client, spec);
+          await diffSource(
+            formatObjectSpec(spec),
+            backupText,
+            actualSource ?? '',
+            true,
+          );
         }
         return;
       }
-
-      const nodes: BackupTreeNode[] = [];
-      collectBackupNodes(tree.root, nodes);
-      for (const node of nodes) {
-        if (!node.type || !node.codeBase64) {
-          continue;
-        }
-        const spec = {
-          type: node.type,
-          name: node.name,
-          functionGroupName: node.functionGroupName,
-        } satisfies ObjectSpec;
-        const label = formatObjectSpec(spec);
-        const backupText = decodeBase64(node.codeBase64);
-        if (node.codeFormat === 'xml') {
-          try {
-            const metadataXml = await readMetadataXmlForType(
-              client,
-              node.type,
-              node.name,
-              node.functionGroupName,
-            );
-            if (!metadataXml) {
-              continue;
-            }
-            const hasDiff = await diffMetadata(
-              label,
-              backupText,
-              metadataXml,
-              showOk,
-            );
-            if (hasDiff) {
-              hasAnyDiff = true;
-            }
-            continue;
-          } catch (_error) {
-            const otherType = await findOtherType(client, node.type, node.name);
-            if (otherType && otherType !== node.type) {
-              console.log(`=== ${label}`);
-              console.log(`changed type: "${node.type}" -> "${otherType}"`);
-              hasAnyDiff = true;
-            }
-            continue;
-          }
-        }
-        const actualSource = await readSourceText(client, spec);
-        if (actualSource === undefined) {
-          continue;
-        }
-        const hasDiff = await diffSource(
-          label,
-          backupText,
-          actualSource ?? '',
-          showOk,
-        );
-        if (hasDiff) {
-          hasAnyDiff = true;
-        }
-      }
-      if (!hasAnyDiff) {
-        console.log('No differences detected');
-      }
-      return;
-    }
-
-    const flat = parsed as BackupFile;
-    if (!Array.isArray(flat.objects)) {
-      throw new Error('Invalid backup file format');
-    }
-    if (!diffAll) {
-      const spec = parseObjectSpec(objectSpecValue);
-      const obj = flat.objects.find(
-        (item) =>
-          item.type === spec.type &&
-          item.name === spec.name &&
-          (spec.functionGroupName
-            ? item.functionGroupName === spec.functionGroupName
-            : true),
-      );
-      if (!obj) {
-        throw new Error(`Object not found: ${formatObjectSpec(spec)}`);
-      }
-      if (!obj.source) {
-        throw new Error('Object has no payload to diff');
-      }
-      const actualSource = await readSourceText(client, spec);
-      if (actualSource === undefined) {
-        throw new Error('Source not available for diff');
-      }
-      const hasDiff = await diffSource(
-        formatObjectSpec(spec),
-        obj.source,
-        actualSource ?? '',
-        true,
-      );
-      if (!hasDiff) {
-        console.log('No source differences detected');
-      }
-      return;
-    }
-    for (const obj of flat.objects) {
-      if (!obj.source) {
-        continue;
-      }
-      const spec = {
-        type: obj.type,
-        name: obj.name,
-        functionGroupName: obj.functionGroupName,
-      } satisfies ObjectSpec;
-      const actualSource = await readSourceText(client, spec);
-      if (actualSource === undefined) {
-        continue;
-      }
-      const hasDiff = await diffSource(
-        formatObjectSpec(spec),
-        obj.source,
-        actualSource ?? '',
-        showOk,
-      );
-      if (hasDiff) {
-        hasAnyDiff = true;
-      }
-    }
-    if (!hasAnyDiff) {
-      console.log('No differences detected');
     }
     return;
   }
 
-  if (command === 'verify') {
+  if (command === 'validate') {
     const input = args.input;
-    if (typeof input !== 'string') {
-      throw new Error('Missing --input');
-    }
-    const format = typeof args.format === 'string' ? args.format : 'text';
-    const strict = Boolean(args.strict);
-    const post = Boolean(args.post);
-    const raw = fs.readFileSync(input, 'utf8');
-    const parsed = YAML.parse(raw) as BackupFile | BackupTreeFile;
-    if (!parsed || typeof parsed !== 'object') {
-      throw new Error('Invalid backup file format');
-    }
+    if (typeof input !== 'string') throw new Error('Missing --input');
+    const parsed = YAML.parse(fs.readFileSync(input, 'utf8')) as
+      | BackupFile
+      | BackupTreeFile;
     verifyBackupChecksum(parsed);
-    if ((parsed as BackupTreeFile).schemaVersion === 2) {
-      verifyTreeChecksums((parsed as BackupTreeFile).root);
-    }
-    const result = await verifyBackup(client, parsed, {
-      strict,
-      mode: post ? 'post-restore' : 'pre-restore',
-    });
-    if (format === 'json') {
-      console.log(JSON.stringify(result, null, 2));
-    } else {
-      console.log(
-        formatVerifyResultsText(
-          result.entries,
-          result.summary,
-          post ? 'post-restore' : 'pre-restore',
-          verbosityState.level,
-        ),
-      );
-    }
-    if (result.summary.conflicts > 0) {
-      throw new Error(`Conflicts found: ${result.summary.conflicts}`);
-    }
+    if (parsed.schemaVersion === 2) verifyTreeChecksums(parsed.root);
+    console.log('Backup validated');
     return;
   }
 
-  if (command === 'restore') {
+  if (command === 'extract') {
     const input = args.input;
-    if (typeof input !== 'string') {
-      throw new Error('Missing --input');
-    }
-    logVerbose(2, `Starting restore from ${input}`);
-    const raw = fs.readFileSync(input, 'utf8');
-    const mode = (args.mode as RestoreMode) || 'upsert';
-    const noActivate = Boolean(args['no-activate']);
-    const activateOnUpdate =
-      !noActivate && (Boolean(args.activate) || !args['no-activate-on-update']);
-    const parsed = YAML.parse(raw) as BackupFile | BackupTreeFile;
-    if (!parsed || typeof parsed !== 'object') {
-      throw new Error('Invalid backup file format');
-    }
-    const force = Boolean(args.force);
-    const strict = Boolean(args.strict);
-    const dangerous = Boolean(args.dangerous);
-    const dry = Boolean(args.dry);
-    const activateOnCreate = !noActivate && !args['no-activate-on-create'];
-    const transportRequest =
-      typeof args.transport === 'string' ? args.transport : undefined;
-    const softwareComponent =
-      typeof args['software-component'] === 'string'
-        ? args['software-component']
-        : undefined;
-    const superPackage =
-      typeof args['super-package'] === 'string'
-        ? args['super-package']
-        : undefined;
-    if (transportRequest) {
-      logVerbose(1, `Using transport request for restore: ${transportRequest}`);
-    }
-    if (softwareComponent) {
-      logVerbose(
-        1,
-        `Using software component override for packages: ${softwareComponent}`,
-      );
-    }
-    if ((parsed as BackupTreeFile).schemaVersion === 2) {
-      const tree = parsed as BackupTreeFile;
-      verifyBackupChecksum(tree);
-      verifyTreeChecksums(tree.root);
-      if (dangerous) {
-        logVerbose(
-          1,
-          `Dangerous mode: deleting ${tree.package} objects from backup before restore`,
-        );
-        await deleteBackupObjects(client, tree, transportRequest);
-      }
-      if (!force) {
-        const result = await verifyBackup(client, tree, { strict });
-        if (result.summary.conflicts > 0) {
-          throw new Error(
-            `Conflicts found: ${result.summary.conflicts}. Use --force to restore anyway.`,
-          );
-        }
-        const plan = buildRestorePlan(tree.root, result.entries);
-        const summary = plan.reduce(
-          (acc, item) => {
-            acc[item.action] = (acc[item.action] || 0) + 1;
-            return acc;
-          },
-          {} as Record<string, number>,
-        );
-        logVerbose(
-          1,
-          `Restore plan: create ${summary.create || 0}, update ${summary.update || 0}, skip ${summary.skip || 0}, error ${summary.error || 0}`,
-        );
-        for (const item of plan) {
-          if (item.action === 'skip') {
-            continue;
-          }
-          const spec = getNodeObjectSpec(item.node);
-          const label = spec ? formatObjectSpec(spec) : item.node.name;
-          logVerbose(2, `Plan ${item.action}: ${label} (${item.status})`);
-        }
-        const restoreIds = new Set(
-          plan
-            .filter(
-              (item) => item.action === 'create' || item.action === 'update',
-            )
-            .map((item) => item.id),
-        );
-        const restoreActions = new Map<string, RestoreMode>();
-        for (const item of plan) {
-          if (item.action === 'create') {
-            restoreActions.set(item.id, 'create');
-          } else if (item.action === 'update') {
-            restoreActions.set(item.id, 'update');
-          }
-        }
-        if (restoreIds.size === 0) {
-          console.log('Restore skipped: no changes detected');
-          return;
-        }
-        if (dry) {
-          logVerbose(
-            1,
-            '\n[DRY RUN] Restore plan built successfully. No changes were made to the system.',
-          );
-          return;
-        }
-        logVerbose(2, `Restoring tree backup for package ${tree.package}`);
-        await restoreTreeBackup(
-          client,
-          tree.root,
-          mode,
-          activateOnUpdate,
-          transportRequest,
-          restoreIds,
-          restoreActions,
-          activateOnCreate,
-          softwareComponent,
-        );
-        console.log('Restore completed. Running post-restore verification...');
-        const postResult = await verifyBackup(client, tree, {
-          strict,
-          mode: 'post-restore',
-        });
-        console.log(
-          formatVerifyResultsText(postResult.entries, postResult.summary, 'post-restore', verbosityState.level),
-        );
-        if (postResult.summary.conflicts > 0) {
-          throw new Error(
-            `Post-restore conflicts found: ${postResult.summary.conflicts}`,
-          );
-        }
-        return;
-      }
-      logVerbose(2, `Restoring tree backup for package ${tree.package}`);
-      await restoreTreeBackup(
-        client,
-        tree.root,
-        mode,
-        activateOnUpdate,
-        transportRequest,
-        undefined,
-        undefined,
-        activateOnCreate,
-        softwareComponent,
-      );
-      console.log('Restore completed. Running post-restore verification...');
-      const postResult = await verifyBackup(client, (parsed as BackupTreeFile), {
-        strict,
-        mode: 'post-restore',
-      });
-      console.log(
-        formatVerifyResultsText(postResult.entries, postResult.summary, 'post-restore', verbosityState.level),
-      );
-      if (postResult.summary.conflicts > 0) {
-        throw new Error(
-          `Post-restore conflicts found: ${postResult.summary.conflicts}`,
-        );
-      }
-      return;
-    }
-    if (!Array.isArray((parsed as BackupFile).objects)) {
-      throw new Error('Invalid backup file format');
-    }
-    const flat = parsed as BackupFile;
-    verifyBackupChecksum(flat);
-    if (dangerous) {
-      throw new Error('Dangerous mode is supported only for package backups');
-    }
-    if (!force) {
-      const result = await verifyBackup(client, flat, { strict });
-      if (result.summary.conflicts > 0) {
-        throw new Error(
-          `Conflicts found: ${result.summary.conflicts}. Use --force to restore anyway.`,
-        );
-      }
-      const restoreActions = new Map<string, RestoreMode>();
-      for (const entry of result.entries) {
-        if (entry.status === 'missing') {
-          restoreActions.set(`${entry.type}:${entry.name}`, 'create');
-        } else if (
-          entry.status === 'package-mismatch' ||
-          entry.status === 'source-mismatch'
-        ) {
-          restoreActions.set(`${entry.type}:${entry.name}`, 'update');
-        }
-      }
-      if (restoreActions.size === 0) {
-        console.log('Restore skipped: no changes detected');
-        return;
-      }
-      if (dry) {
-      logVerbose(
-        1,
-        '\n[DRY RUN] Restore execution skipped. No changes were made to the system.',
-      );
-      return;
-    }
-    logVerbose(2, `Restoring flat backup (${flat.objects.length} objects)`);
-      await restoreObjects(
-        client,
-        flat.objects,
-        mode,
-        activateOnUpdate,
-        transportRequest,
-        restoreActions,
-        activateOnCreate,
-      );
-      console.log('Restore completed. Running post-restore verification...');
-      const postResult = await verifyBackup(client, flat, {
-        strict,
-        mode: 'post-restore',
-      });
-      console.log(
-        formatVerifyResultsText(postResult.entries, postResult.summary, 'post-restore', verbosityState.level),
-      );
-      if (postResult.summary.conflicts > 0) {
-        throw new Error(
-          `Post-restore conflicts found: ${postResult.summary.conflicts}`,
-        );
-      }
-      return;
-    }
-    if (dry) {
-      logVerbose(
-        1,
-        '\n[DRY RUN] Restore execution skipped. No changes were made to the system.',
-      );
-      return;
-    }
-    logVerbose(2, `Restoring flat backup (${flat.objects.length} objects)`);
-    await restoreObjects(
-      client,
-      flat.objects,
-      mode,
-      activateOnUpdate,
-      transportRequest,
-      undefined,
-      activateOnCreate,
+    const objectSpec = args.object;
+    const output = args.out;
+    if (
+      typeof input !== 'string' ||
+      typeof objectSpec !== 'string' ||
+      typeof output !== 'string'
+    )
+      throw new Error('Missing args');
+    const parsed = YAML.parse(fs.readFileSync(input, 'utf8')) as BackupTreeFile;
+    const spec = parseObjectSpec(objectSpec);
+    const node = findNodeInTree(parsed.root, spec);
+    if (!node || !node.codeBase64) throw new Error('Not found');
+    fs.writeFileSync(output, decodeBase64(node.codeBase64), 'utf8');
+    console.log(`Extracted to ${output}`);
+    return;
+  }
+
+  if (command === 'patch') {
+    const input = args.input;
+    const objectSpec = args.object;
+    const filePath = args.file;
+    if (
+      typeof input !== 'string' ||
+      typeof objectSpec !== 'string' ||
+      typeof filePath !== 'string'
+    )
+      throw new Error('Missing args');
+    const output = typeof args.output === 'string' ? args.output : input;
+    const parsed = YAML.parse(fs.readFileSync(input, 'utf8')) as BackupTreeFile;
+    const node = findNodeInTree(parsed.root, parseObjectSpec(objectSpec));
+    if (!node) throw new Error('Not found');
+    node.codeBase64 = encodeBase64(fs.readFileSync(filePath, 'utf8'));
+    node.codeChecksum = computeCodeChecksum(node.codeBase64);
+    updateTreeChecksums(parsed.root);
+    parsed.checksum = computeBackupChecksum(parsed);
+    fs.writeFileSync(
+      output as string,
+      YAML.stringify(parsed, { lineWidth: 0 }),
+      'utf8',
     );
-    console.log('Restore completed. Running post-restore verification...');
-    const postResult = await verifyBackup(client, flat, {
-      strict,
-      mode: 'post-restore',
+    console.log(`Backup updated`);
+    return;
+  }
+
+  if (command === 'check') {
+    if (!client) throw new Error('Client required');
+    const input = args.input;
+    if (typeof input !== 'string') throw new Error('Missing --input');
+    const backup = YAML.parse(fs.readFileSync(input, 'utf8')) as
+      | BackupFile
+      | BackupTreeFile;
+    const result = await verifyBackup(client, backup, {
+      strict: Boolean(args.strict),
     });
     console.log(
-      formatVerifyResultsText(postResult.entries, postResult.summary, 'post-restore', verbosityState.level),
+      formatVerifyResultsText(
+        result.entries,
+        result.summary,
+        'pre-restore',
+        verbosityState.level,
+      ),
     );
-    if (postResult.summary.conflicts > 0) {
-      throw new Error(
-        `Post-restore conflicts found: ${postResult.summary.conflicts}`,
-      );
-    }
     return;
   }
 
@@ -942,39 +695,16 @@ export async function run(): Promise<void> {
 
 function enableLogFile(logFile: string): void {
   const dir = path.dirname(logFile);
-  if (dir && dir !== '.') {
-    fs.mkdirSync(dir, { recursive: true });
-  }
+  if (dir && dir !== '.') fs.mkdirSync(dir, { recursive: true });
   const stream = fs.createWriteStream(logFile, { flags: 'a' });
-
-  const writeLine = (args: unknown[]): void => {
-    const line = args.map(formatLogArg).join(' ');
-    stream.write(`${line}\n`);
-  };
-
   const wrap =
-    (fn: (...args: unknown[]) => void) =>
-    (...args: unknown[]): void => {
+    (fn: any) =>
+    (...args: any[]) => {
       fn(...args);
-      writeLine(args);
+      stream.write(
+        `${args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ')}\n`,
+      );
     };
-
   console.log = wrap(console.log.bind(console));
-  console.info = wrap(console.info.bind(console));
-  console.warn = wrap(console.warn.bind(console));
   console.error = wrap(console.error.bind(console));
-}
-
-function formatLogArg(arg: unknown): string {
-  if (arg instanceof Error) {
-    return redactText(arg.stack ?? arg.message);
-  }
-  if (typeof arg === 'string') {
-    return redactText(arg);
-  }
-  try {
-    return safeStringify(arg);
-  } catch {
-    return String(arg);
-  }
 }
