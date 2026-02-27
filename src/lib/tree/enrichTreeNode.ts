@@ -4,6 +4,7 @@ import { logVerbose } from '../cli/logVerbose';
 import { encodeBase64 } from '../crypto/encodeBase64';
 import type { BackupTreeNode } from '../types';
 import { ensureDescription } from '../utils/ensureDescription';
+import { parseBdefSource } from '../utils/parseBdefSource';
 import { parseBehaviorDefinitionFromClass } from '../utils/parseBehaviorDefinitionFromClass';
 import { extractMetadata } from '../xml/extractMetadata';
 import { buildConfigForNode } from './buildConfigForNode';
@@ -41,6 +42,10 @@ export async function enrichTreeNode(
     `Node: ${node.name} [${node.adtType || 'unknown'}] -> ${mappedType || 'unknown'} (${nextNode.restoreStatus})`,
   );
 
+  if (!mappedType && node.adtType) {
+    logVerbose(1, `  [SKIP] ${node.name} — unsupported type ${node.adtType}`);
+  }
+
   if (mappedType && includeCode) {
     logVerbose(2, `  Reading ${mappedType}:${node.name}`);
   }
@@ -76,6 +81,15 @@ export async function enrichTreeNode(
     if (payload.payload) {
       nextNode.codeBase64 = encodeBase64(payload.payload);
       nextNode.codeFormat = payload.format;
+      if (mappedType === 'behaviorDefinition') {
+        const bdefInfo = parseBdefSource(payload.payload);
+        if (bdefInfo.rootEntity || bdefInfo.implementationType) {
+          nextNode.config = {
+            ...(nextNode.config || {}),
+            ...bdefInfo,
+          };
+        }
+      }
       if (mappedType === 'behaviorImplementation') {
         const behaviorDefinition = parseBehaviorDefinitionFromClass(
           payload.payload,

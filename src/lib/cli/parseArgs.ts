@@ -6,6 +6,11 @@ export function parseArgs(
     const arg = argv[i];
     if (arg.startsWith('--')) {
       const key = arg.slice(2);
+      // Handle --v, --vv, --vvv as verbosity flags
+      if (/^v+$/.test(key)) {
+        args.verbosity = Math.max(Number(args.verbosity || 0), key.length);
+        continue;
+      }
       const next = argv[i + 1];
       if (!next || next.startsWith('--') || next.startsWith('-')) {
         args[key] = true;

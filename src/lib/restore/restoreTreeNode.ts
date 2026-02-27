@@ -25,6 +25,7 @@ import { decodeBase64 } from '../crypto/decodeBase64';
 import type { BackupTreeNode, RestoreMode } from '../types';
 import { asConfig } from '../utils/asConfig';
 import { ensureDescription } from '../utils/ensureDescription';
+import { parseBdefSource } from '../utils/parseBdefSource';
 import { parsePackageConfig } from '../xml/parsePackageConfig';
 import { applyTransportRequest } from './applyTransportRequest';
 
@@ -311,9 +312,27 @@ export async function restoreTreeNode(
             .create(asConfig<IServiceBindingConfig>(config), options);
         }
         // Always update to set properties (create only registers the name)
-        await client
-          .getServiceBinding()
-          .update(asConfig<IServiceBindingConfig>(config));
+        try {
+          await client
+            .getServiceBinding()
+            .update(asConfig<IServiceBindingConfig>(config));
+        } catch (updateError) {
+          const msg =
+            updateError instanceof Error
+              ? updateError.message
+              : String(updateError);
+          if (mode === 'update' && msg.includes('404')) {
+            // Object missing despite verify — fallback to create + update
+            await client
+              .getServiceBinding()
+              .create(asConfig<IServiceBindingConfig>(config), options);
+            await client
+              .getServiceBinding()
+              .update(asConfig<IServiceBindingConfig>(config));
+          } else {
+            throw updateError;
+          }
+        }
         return;
       }
       case 'metadataExtension': {
@@ -335,9 +354,20 @@ export async function restoreTreeNode(
       }
       case 'behaviorDefinition': {
         if (mode !== 'update') {
+          // Fill rootEntity/implementationType from source if missing in config
+          let bdefConfig = config;
+          if (payload && (!config.rootEntity || !config.implementationType)) {
+            const parsed = parseBdefSource(payload);
+            bdefConfig = {
+              ...config,
+              rootEntity: config.rootEntity || parsed.rootEntity,
+              implementationType:
+                config.implementationType || parsed.implementationType,
+            };
+          }
           await client
             .getBehaviorDefinition()
-            .create(asConfig<IBehaviorDefinitionConfig>(config), options);
+            .create(asConfig<IBehaviorDefinitionConfig>(bdefConfig), options);
         }
         if (payload) {
           await client.getBehaviorDefinition().update(

@@ -61,8 +61,8 @@ async function verifyIndividual(
           functionGroupName: node.functionGroupName,
         },
         getExpectedPackage(node.config),
-        node.source || node.codeBase64,
-        undefined,
+        node.source,
+        node.codeBase64,
         node.codeFormat || (node.source ? 'source' : undefined),
         mode === 'post-restore' ? 'inactive' : 'active',
       );

@@ -341,13 +341,15 @@ export async function run(): Promise<void> {
     }
 
     const skipExisting = Boolean(args['skip-existing']);
+    const skipUnchanged = Boolean(args['skip-unchanged']);
 
     for (const group of plan.groups) {
       for (const action of group.actions) {
         const id = `${action.type}:${action.name}`;
         const status = systemState.get(id);
-        if (
-          status === 'ok' ||
+        if (status === 'ok') {
+          action.action = skipExisting || skipUnchanged ? 'skip' : 'update';
+        } else if (
           status === 'package-mismatch' ||
           status === 'source-mismatch'
         ) {

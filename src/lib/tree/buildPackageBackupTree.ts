@@ -3,6 +3,7 @@ import { logVerbose } from '../cli/logVerbose';
 import { collectTreeDependencies } from '../dependencies/collectTreeDependencies';
 import type { BackupTreeFile, BackupTreeNode } from '../types';
 import { enrichTreeNode } from './enrichTreeNode';
+import { flattenTree } from './flattenTree';
 
 export async function buildPackageBackupTree(
   client: AdtClient,
@@ -21,6 +22,15 @@ export async function buildPackageBackupTree(
 
   logVerbose(1, `Enriching objects for ${packageNameUpper}`);
   const enrichedRoot = await enrichTreeNode(rootTree, client, true);
+
+  const allNodes = flattenTree(enrichedRoot);
+  const backed = allNodes.filter((n) => n.type && n.codeBase64);
+  const skipped = allNodes.filter((n) => !n.type && n.adtType);
+  const noPayload = allNodes.filter((n) => n.type && !n.codeBase64);
+  logVerbose(
+    1,
+    `Summary: ${backed.length} backed up, ${skipped.length} unsupported, ${noPayload.length} without payload`,
+  );
 
   logVerbose(1, `Collecting dependencies for ${packageNameUpper}`);
   await collectTreeDependencies(client, enrichedRoot);

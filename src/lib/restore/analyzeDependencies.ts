@@ -67,7 +67,33 @@ export function analyzeDependencies(nodes: BackupTreeNode[]): RestoreGroup[] {
       }
 
       // 2. Explicit structural dependencies (from config or XML properties)
-      // Example: Behavior Implementation -> Behavior Definition
+
+      // Behavior Definition <-> Implementation Class (bidirectional = same SCC group)
+      // From class source: "FOR BEHAVIOR OF <bdef_name>"
+      if (node.type === 'class' || node.type === 'behaviorImplementation') {
+        const bdefMatch = contentUpper.match(
+          /FOR\s+BEHAVIOR\s+OF\s+([A-Z0-9_/]+)/,
+        );
+        if (bdefMatch) {
+          const bdefId = `BEHAVIORDEFINITION:${bdefMatch[1]}`;
+          if (allIds.has(bdefId) && bdefId !== id) deps.add(bdefId);
+        }
+      }
+
+      // From BDEF source: "IMPLEMENTATION IN CLASS <class_name>"
+      if (node.type === 'behaviorDefinition') {
+        for (const m of contentUpper.matchAll(
+          /IMPLEMENTATION\s+IN\s+CLASS\s+([A-Z0-9_/]+)/g,
+        )) {
+          const className = m[1];
+          const classId = `CLASS:${className}`;
+          if (allIds.has(classId)) deps.add(classId);
+          const bimpId = `BEHAVIORIMPLEMENTATION:${className}`;
+          if (allIds.has(bimpId)) deps.add(bimpId);
+        }
+      }
+
+      // Behavior Implementation -> Behavior Definition (from config)
       if (
         node.type === 'behaviorImplementation' &&
         node.config?.behaviorDefinition
@@ -77,7 +103,7 @@ export function analyzeDependencies(nodes: BackupTreeNode[]): RestoreGroup[] {
         if (allIds.has(bdefId)) deps.add(bdefId);
       }
 
-      // Example: Service Binding -> Service Definition
+      // Service Binding -> Service Definition
       if (
         node.type === 'serviceBinding' &&
         node.config?.serviceDefinitionName

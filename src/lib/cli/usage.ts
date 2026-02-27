@@ -72,13 +72,15 @@ Updates a restoration plan with actual TARGET system state (online).
 Options:
   --plan <file>             Plan file to update (required)
   --output <file>           Output plan file (defaults to input file)
-  --skip-existing           Skip existing objects (mark as 'skip' instead of 'update')
+  --skip-existing           Skip all existing objects (mark as 'skip' instead of 'update')
+  --skip-unchanged          Skip unchanged objects only (source-mismatch still updated)
 
 ${commonOptions}
 
 Examples:
   adt-backup verify --plan plan.yaml --target mdd-sk-dev
   adt-backup verify --plan plan.yaml --target mdd-sk-dev --skip-existing
+  adt-backup verify --plan plan.yaml --target mdd-sk-dev --skip-unchanged
 `.trim(),
 
   check: `
