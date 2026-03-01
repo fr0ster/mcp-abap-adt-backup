@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { ObjectReference } from '@mcp-abap-adt/adt-clients';
-import { AdtClient } from '@mcp-abap-adt/adt-clients';
+import { AdtClient, getSystemInformation } from '@mcp-abap-adt/adt-clients';
 import { createAbapConnection } from '@mcp-abap-adt/connection';
 import YAML from 'yaml';
 import { getSapConfigFromBroker } from './auth/getSapConfigFromBroker';
@@ -164,7 +164,17 @@ export async function run(): Promise<void> {
         undefined,
         sapAuth.tokenRefresher,
       );
-      client = new AdtClient(connection, adtLogger);
+      // Resolve masterSystem/responsible for AdtClient:
+      // Cloud (BTP): both from getSystemInformation endpoint
+      // On-premise: responsible from connection username, no masterSystem
+      const systemInfo = await getSystemInformation(connection);
+      const masterSystem = systemInfo?.systemID;
+      const responsible = systemInfo?.userName || sapAuth.config.username;
+
+      client = new AdtClient(connection, adtLogger, {
+        masterSystem,
+        responsible,
+      });
     }
   }
 
