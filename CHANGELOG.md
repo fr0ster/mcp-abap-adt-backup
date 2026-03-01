@@ -8,6 +8,12 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+## [1.1.0] - 2026-03-01
+
+### Changed
+- **Dependencies:** Upgraded `@mcp-abap-adt/adt-clients` from ^1.1.1 to ^2.2.0.
+- **System context:** `AdtClient` now receives `masterSystem` and `responsible` via constructor options. On cloud (BTP) systems both values are resolved from the ADT system-information endpoint; on on-premise systems `responsible` is taken from the connection username.
+
 ## [1.0.0] - 2026-02-27
 
 ### Added
