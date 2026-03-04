@@ -8,6 +8,19 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+## [1.2.0] - 2026-03-04
+
+### Changed
+- **Plan grouping:** Replaced type-phase (PLAN_PHASES) plan generation with SCC-based dependency level analysis. Objects are grouped by dependency level (`level = max(dependency level) + 1`), with independent SCCs at the same level merged into a single group.
+- **Plan-driven restore:** Restore now follows the plan's group order directly. Each group's objects are created inactive then bulk-activated together. Falls back to type-phase restore when no plan is provided.
+- **Intra-group creation order:** `TYPE_CREATION_ORDER` ensures correct creation order within groups (e.g. BDEF before BIML class), preventing SAP errors when objects depend on each other within a circular group.
+- **Activation diagnostics:** Activation now parses XML response messages from SAP for error reporting and skips polling when errors are detected.
+- **Activate command:** Checks actual inactive state before activating; reports per-object status after activation.
+- **Dependency analysis refactor:** Extracted `buildAdjacency`, `tarjanSCC`, `buildSccDag` as shared helpers. Added `analyzeDependencyLevels` function.
+
+### Fixed
+- **Verify false positives:** `readMetadataXmlForType` now correctly returns `null` (not found) when ADT clients swallow HTTP 404 and return `undefined`. Previously reported UPDATE for objects that don't exist in the target system.
+
 ## [1.1.0] - 2026-03-01
 
 ### Changed
