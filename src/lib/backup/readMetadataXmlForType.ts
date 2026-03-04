@@ -9,106 +9,126 @@ export async function readMetadataXmlForType(
   _functionGroupName?: string,
 ): Promise<string | null | undefined> {
   try {
+    let result: string | undefined;
     switch (type) {
       case 'package': {
         const state = await client
           .getPackage()
           .readMetadata({ packageName: name });
-        return responseToText(state.metadataResult);
+        result = responseToText(state.metadataResult);
+        break;
       }
       case 'class': {
         const state = await client.getClass().readMetadata({ className: name });
-        return responseToText(state.metadataResult);
+        result = responseToText(state.metadataResult);
+        break;
       }
       case 'interface': {
         const state = await client
           .getInterface()
           .readMetadata({ interfaceName: name });
-        return responseToText(state.metadataResult);
+        result = responseToText(state.metadataResult);
+        break;
       }
       case 'domain': {
         const state = await client
           .getDomain()
           .readMetadata({ domainName: name });
-        return responseToText(state.metadataResult);
+        result = responseToText(state.metadataResult);
+        break;
       }
       case 'dataElement': {
         const state = await client
           .getDataElement()
           .readMetadata({ dataElementName: name });
-        return responseToText(state.metadataResult);
+        result = responseToText(state.metadataResult);
+        break;
       }
       case 'table': {
         const state = await client.getTable().readMetadata({ tableName: name });
-        return responseToText(state.metadataResult);
+        result = responseToText(state.metadataResult);
+        break;
       }
       case 'tableType': {
         const state = await client
           .getTableType()
           .readMetadata({ tableTypeName: name });
-        return responseToText(state.metadataResult);
+        result = responseToText(state.metadataResult);
+        break;
       }
       case 'structure': {
         const state = await client
           .getStructure()
           .readMetadata({ structureName: name });
-        return responseToText(state.metadataResult);
+        result = responseToText(state.metadataResult);
+        break;
       }
       case 'view': {
         const state = await client.getView().readMetadata({ viewName: name });
-        return responseToText(state.metadataResult);
+        result = responseToText(state.metadataResult);
+        break;
       }
       case 'behaviorDefinition': {
         const state = await client
           .getBehaviorDefinition()
           .readMetadata({ name });
-        return responseToText(state.metadataResult);
+        result = responseToText(state.metadataResult);
+        break;
       }
       case 'behaviorImplementation': {
         const state = await client
           .getBehaviorImplementation()
           .readMetadata({ className: name });
-        return responseToText(state.metadataResult);
+        result = responseToText(state.metadataResult);
+        break;
       }
       case 'serviceDefinition': {
         const state = await client
           .getServiceDefinition()
           .readMetadata({ serviceDefinitionName: name });
-        return responseToText(state.metadataResult);
+        result = responseToText(state.metadataResult);
+        break;
       }
       case 'serviceBinding': {
         const state = await client
           .getServiceBinding()
           .readMetadata({ bindingName: name });
-        return responseToText(state.metadataResult);
+        result = responseToText(state.metadataResult);
+        break;
       }
       case 'metadataExtension': {
         const state = await client
           .getMetadataExtension()
           .readMetadata({ name });
-        return responseToText(state.metadataResult);
+        result = responseToText(state.metadataResult);
+        break;
       }
       case 'functionGroup': {
         const state = await client
           .getFunctionGroup()
           .readMetadata({ functionGroupName: name });
-        return responseToText(state.metadataResult);
+        result = responseToText(state.metadataResult);
+        break;
       }
       case 'enhancement': {
         const state = await client
           .getEnhancement()
           .readMetadata({ enhancementName: name, enhancementType: 'enhoxh' });
-        return responseToText(state.metadataResult);
+        result = responseToText(state.metadataResult);
+        break;
       }
       case 'accessControl': {
         const state = await client
           .getAccessControl()
           .readMetadata({ accessControlName: name });
-        return responseToText(state.metadataResult);
+        result = responseToText(state.metadataResult);
+        break;
       }
       default:
         return undefined;
     }
+    // ADT clients return undefined on 404 — treat as not found
+    return result ?? null;
   } catch (error: any) {
     const status = error.status || error.response?.status;
     const message = error.message || String(error);
