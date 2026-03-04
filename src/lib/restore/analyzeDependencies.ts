@@ -11,27 +11,14 @@ function nodeKey(node: BackupTreeNode): string {
 }
 
 /**
- * Robustly analyzes dependencies between objects by scanning both
- * source code and XML metadata.
- * Uses composite type:name keys to handle objects that share the same name
- * (e.g. view and behaviorDefinition for the same CDS entity).
+ * Build adjacency map (forward dependencies) by scanning source code and config.
  */
-export function analyzeDependencies(nodes: BackupTreeNode[]): RestoreGroup[] {
-  const idToNode = new Map<string, BackupTreeNode>();
-  const nameToIds = new Map<string, string[]>();
-  const allNames = new Set<string>();
-
-  for (const node of nodes) {
-    const id = nodeKey(node);
-    const upperName = node.name.toUpperCase();
-    idToNode.set(id, node);
-    allNames.add(upperName);
-    const ids = nameToIds.get(upperName) || [];
-    ids.push(id);
-    nameToIds.set(upperName, ids);
-  }
-
-  const allIds = new Set(idToNode.keys());
+function buildAdjacency(
+  nodes: BackupTreeNode[],
+  allNames: Set<string>,
+  nameToIds: Map<string, string[]>,
+  allIds: Set<string>,
+): Map<string, Set<string>> {
   const adj = new Map<string, Set<string>>();
 
   for (const node of nodes) {
@@ -47,18 +34,13 @@ export function analyzeDependencies(nodes: BackupTreeNode[]): RestoreGroup[] {
       for (const targetName of allNames) {
         if (targetName === nodeNameUpper) continue;
 
-        // Escape name for regex, specifically handling namespaces with /
         const escapedTarget = targetName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-        // Match only if surrounded by boundaries that are NOT part of an ABAP name
-        // (i.e. not letters, digits, _, or /)
         const regex = new RegExp(
           `(?<=[^A-Z0-9_/]|^)${escapedTarget}(?=[^A-Z0-9_/]|$)`,
           'g',
         );
 
         if (regex.test(contentUpper)) {
-          // Resolve name to all node IDs with that name
           const targetIds = nameToIds.get(targetName) || [];
           for (const tid of targetIds) {
             if (tid !== id) deps.add(tid);
@@ -66,10 +48,9 @@ export function analyzeDependencies(nodes: BackupTreeNode[]): RestoreGroup[] {
         }
       }
 
-      // 2. Explicit structural dependencies (from config or XML properties)
+      // 2. Explicit structural dependencies
 
-      // Behavior Definition <-> Implementation Class (bidirectional = same SCC group)
-      // From class source: "FOR BEHAVIOR OF <bdef_name>"
+      // BIML class -> BDEF (bidirectional = same SCC)
       if (node.type === 'class' || node.type === 'behaviorImplementation') {
         const bdefMatch = contentUpper.match(
           /FOR\s+BEHAVIOR\s+OF\s+([A-Z0-9_/]+)/,
@@ -80,7 +61,7 @@ export function analyzeDependencies(nodes: BackupTreeNode[]): RestoreGroup[] {
         }
       }
 
-      // From BDEF source: "IMPLEMENTATION IN CLASS <class_name>"
+      // BDEF -> BIML class
       if (node.type === 'behaviorDefinition') {
         for (const m of contentUpper.matchAll(
           /IMPLEMENTATION\s+IN\s+CLASS\s+([A-Z0-9_/]+)/g,
@@ -117,7 +98,16 @@ export function analyzeDependencies(nodes: BackupTreeNode[]): RestoreGroup[] {
     adj.set(id, deps);
   }
 
-  // Tarjan's algorithm for SCCs
+  return adj;
+}
+
+/**
+ * Tarjan's SCC algorithm.
+ */
+function tarjanSCC(
+  allIds: Set<string>,
+  adj: Map<string, Set<string>>,
+): string[][] {
   let index = 0;
   const stack: string[] = [];
   const onStack = new Set<string>();
@@ -168,7 +158,16 @@ export function analyzeDependencies(nodes: BackupTreeNode[]): RestoreGroup[] {
     }
   }
 
-  // Dependency graph of SCCs
+  return sccs;
+}
+
+/**
+ * Build SCC DAG and topological order from SCCs and adjacency map.
+ */
+function buildSccDag(
+  sccs: string[][],
+  adj: Map<string, Set<string>>,
+): { sccAdj: Map<number, Set<number>>; order: number[] } {
   const sccAdj = new Map<number, Set<number>>();
   const nodeToSccIndex = new Map<string, number>();
   sccs.forEach((scc, i) => {
@@ -209,11 +208,136 @@ export function analyzeDependencies(nodes: BackupTreeNode[]): RestoreGroup[] {
     visit(i);
   }
 
+  return { sccAdj, order };
+}
+
+/**
+ * Robustly analyzes dependencies between objects by scanning both
+ * source code and XML metadata.
+ * Uses composite type:name keys to handle objects that share the same name
+ * (e.g. view and behaviorDefinition for the same CDS entity).
+ */
+export function analyzeDependencies(nodes: BackupTreeNode[]): RestoreGroup[] {
+  const idToNode = new Map<string, BackupTreeNode>();
+  const nameToIds = new Map<string, string[]>();
+  const allNames = new Set<string>();
+
+  for (const node of nodes) {
+    const id = nodeKey(node);
+    const upperName = node.name.toUpperCase();
+    idToNode.set(id, node);
+    allNames.add(upperName);
+    const ids = nameToIds.get(upperName) || [];
+    ids.push(id);
+    nameToIds.set(upperName, ids);
+  }
+
+  const allIds = new Set(idToNode.keys());
+  const adj = buildAdjacency(nodes, allNames, nameToIds, allIds);
+  const sccs = tarjanSCC(allIds, adj);
+  const { order } = buildSccDag(sccs, adj);
+
   return order.map((i) => {
     const ids = sccs[i];
     return {
       nodes: ids.map((id) => idToNode.get(id)!),
       isCircular: ids.length > 1,
+    };
+  });
+}
+
+/**
+ * Creation order priority within a group.
+ * Lower = created first. Ensures BDEF exists before BIML class, etc.
+ */
+const TYPE_CREATION_ORDER: Record<string, number> = {
+  domain: 0,
+  dataElement: 1,
+  structure: 2,
+  table: 2,
+  tableType: 2,
+  view: 3,
+  behaviorDefinition: 4,
+  behaviorImplementation: 5,
+  class: 5,
+  interface: 5,
+  accessControl: 6,
+  metadataExtension: 6,
+  program: 7,
+  functionGroup: 7,
+  functionModule: 8,
+  serviceDefinition: 9,
+  serviceBinding: 10,
+  enhancement: 11,
+};
+
+/**
+ * Analyzes dependencies and merges SCCs at the same dependency level
+ * into single groups. Level = max(level of dependencies) + 1.
+ * Independent SCCs (same level) are merged into one group.
+ */
+export function analyzeDependencyLevels(
+  nodes: BackupTreeNode[],
+): RestoreGroup[] {
+  const idToNode = new Map<string, BackupTreeNode>();
+  const nameToIds = new Map<string, string[]>();
+  const allNames = new Set<string>();
+
+  for (const node of nodes) {
+    const id = nodeKey(node);
+    const upperName = node.name.toUpperCase();
+    idToNode.set(id, node);
+    allNames.add(upperName);
+    const ids = nameToIds.get(upperName) || [];
+    ids.push(id);
+    nameToIds.set(upperName, ids);
+  }
+
+  const allIds = new Set(idToNode.keys());
+  const adj = buildAdjacency(nodes, allNames, nameToIds, allIds);
+  const sccs = tarjanSCC(allIds, adj);
+  const { sccAdj, order } = buildSccDag(sccs, adj);
+
+  // Compute level for each SCC: level = max(level of deps) + 1
+  const sccLevel = new Map<number, number>();
+  for (const i of order) {
+    let maxDepLevel = -1;
+    const deps = sccAdj.get(i) || new Set();
+    for (const d of deps) {
+      const depLevel = sccLevel.get(d) ?? 0;
+      if (depLevel > maxDepLevel) maxDepLevel = depLevel;
+    }
+    sccLevel.set(i, maxDepLevel + 1);
+  }
+
+  // Group SCCs by level, merge into RestoreGroups
+  const levelMap = new Map<
+    number,
+    { nodes: BackupTreeNode[]; hasCircular: boolean }
+  >();
+  for (const i of order) {
+    const level = sccLevel.get(i)!;
+    if (!levelMap.has(level)) {
+      levelMap.set(level, { nodes: [], hasCircular: false });
+    }
+    const entry = levelMap.get(level)!;
+    const sccNodes = sccs[i].map((id) => idToNode.get(id)!);
+    entry.nodes.push(...sccNodes);
+    if (sccs[i].length > 1) entry.hasCircular = true;
+  }
+
+  const sortedLevels = [...levelMap.keys()].sort((a, b) => a - b);
+  return sortedLevels.map((level) => {
+    const entry = levelMap.get(level)!;
+    // Sort nodes within group by creation order (views before BDEFs before classes)
+    entry.nodes.sort(
+      (a, b) =>
+        (TYPE_CREATION_ORDER[a.type || ''] ?? 99) -
+        (TYPE_CREATION_ORDER[b.type || ''] ?? 99),
+    );
+    return {
+      nodes: entry.nodes,
+      isCircular: entry.hasCircular || entry.nodes.length > 1,
     };
   });
 }

@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import type { ObjectReference } from '@mcp-abap-adt/adt-clients';
 import { AdtClient, getSystemInformation } from '@mcp-abap-adt/adt-clients';
 import { createAbapConnection } from '@mcp-abap-adt/connection';
+import { XMLParser } from 'fast-xml-parser';
 import YAML from 'yaml';
 import { getSapConfigFromBroker } from './auth/getSapConfigFromBroker';
 import { backupObject } from './backup/backupObject';
@@ -24,7 +25,7 @@ import { updateTreeChecksums } from './crypto/updateTreeChecksums';
 import { verifyBackupChecksum } from './crypto/verifyBackupChecksum';
 import { verifyTreeChecksums } from './crypto/verifyTreeChecksums';
 import { collectTreeDependencies } from './dependencies/collectTreeDependencies';
-import { analyzeDependencies } from './restore/analyzeDependencies';
+import { analyzeDependencyLevels } from './restore/analyzeDependencies';
 import { restoreTreeBackup } from './restore/restoreTreeBackup';
 import { verbosityState } from './state/verbosity';
 import { buildPackageBackupTree } from './tree/buildPackageBackupTree';
@@ -39,6 +40,7 @@ import type {
   BackupTreeNode,
   RestoreMode,
   RestorePlan,
+  RestorePlanGroup,
 } from './types';
 import { diffUnified } from './utils/diffUnified';
 import { formatObjectSpec } from './utils/formatObjectSpec';
@@ -46,6 +48,12 @@ import { parseObjectSpec } from './utils/parseObjectSpec';
 import { formatVerifyResultsText } from './verify/formatVerifyResultsText';
 import { verifyBackup } from './verify/verifyBackup';
 import { extractMetadata } from './xml/extractMetadata';
+
+const xmlParser = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: '@_',
+  parseAttributeValue: false,
+});
 
 export async function run(): Promise<void> {
   const argv = process.argv.slice(2);
@@ -288,7 +296,22 @@ export async function run(): Promise<void> {
     const nonPackageNodes = allNodes.filter(
       (n: BackupTreeNode) => n.type !== 'package',
     );
-    const groups = analyzeDependencies(nonPackageNodes);
+
+    // Dependency-based grouping: SCCs merged by dependency level
+    const depGroups = analyzeDependencyLevels(nonPackageNodes);
+
+    const nonPackageGroups: RestorePlanGroup[] = depGroups.map((group, i) => ({
+      id: i + 1,
+      isCircular: group.isCircular,
+      actions: group.nodes.map((node: BackupTreeNode) => ({
+        id: getNodeObjectId(node)!,
+        type: node.type!,
+        name: node.name,
+        functionGroupName: node.functionGroupName,
+        action: mode as 'create' | 'update' | 'skip',
+        adtType: node.adtType,
+      })),
+    }));
 
     const plan: RestorePlan = {
       schemaVersion: 1,
@@ -307,18 +330,7 @@ export async function run(): Promise<void> {
             adtType: node.adtType,
           })),
         },
-        ...groups.map((group, idx) => ({
-          id: idx + 1,
-          isCircular: group.isCircular,
-          actions: group.nodes.map((node: BackupTreeNode) => ({
-            id: getNodeObjectId(node)!,
-            type: node.type!,
-            name: node.name,
-            functionGroupName: node.functionGroupName,
-            action: mode as any,
-            adtType: node.adtType,
-          })),
-        })),
+        ...nonPackageGroups,
       ],
     };
 
@@ -436,11 +448,7 @@ export async function run(): Promise<void> {
       activate,
       typeof args.transport === 'string' ? args.transport : undefined,
       undefined,
-      new Map(
-        plan.groups
-          .flatMap((g) => g.actions)
-          .map((a) => [a.id, a.action as any]),
-      ),
+      plan.groups,
       activateOnCreate,
       typeof args['software-component'] === 'string'
         ? args['software-component']
@@ -480,61 +488,134 @@ export async function run(): Promise<void> {
     }
 
     const plan = YAML.parse(fs.readFileSync(planPath, 'utf8')) as RestorePlan;
-    const allActions = plan.groups.flatMap((g) => g.actions);
 
-    const filtered = allActions.filter((a) => {
-      if (a.type === 'package') return false;
-      if (!a.adtType) return false;
-      if (filter === 'all') return a.action !== 'create';
-      return a.action === filter;
-    });
+    // Collect all plan refs (non-package, matching filter)
+    const planRefs: ObjectReference[] = [];
+    for (const group of plan.groups) {
+      for (const action of group.actions) {
+        if (action.type === 'package' || !action.adtType) continue;
+        if (filter !== 'all' && action.action !== filter) continue;
+        if (filter === 'all' && action.action === 'create') continue;
+        planRefs.push({ name: action.name, type: action.adtType });
+      }
+    }
 
-    if (filtered.length === 0) {
+    if (planRefs.length === 0) {
       console.log('No objects to activate.');
       return;
     }
 
+    // Check which plan objects are actually inactive
+    const inactiveResult = await client.getUtils().getInactiveObjects();
+    const inactiveSet = new Set(
+      inactiveResult.objects.map((o) => `${o.type}:${o.name}`.toUpperCase()),
+    );
+    const toActivate = planRefs.filter((r) =>
+      inactiveSet.has(`${r.type}:${r.name}`.toUpperCase()),
+    );
+    const alreadyActive = planRefs.length - toActivate.length;
+
+    if (toActivate.length === 0) {
+      console.log(
+        `All ${planRefs.length} object(s) are already active. Nothing to activate.`,
+      );
+      return;
+    }
+
     console.log(
-      `Activating ${filtered.length} object(s) (filter: ${filter})...`,
+      `Found ${toActivate.length} inactive object(s) out of ${planRefs.length} (${alreadyActive} already active). Activating...`,
     );
 
-    // Group by plan groups to respect dependency order
+    // Group inactive objects by plan groups to respect dependency order
     let activated = 0;
-    let skipped = 0;
     let failed = 0;
 
     for (const group of plan.groups) {
       const groupRefs: ObjectReference[] = [];
       for (const action of group.actions) {
         if (action.type === 'package' || !action.adtType) continue;
-        if (filter !== 'all' && action.action !== filter) continue;
-        if (filter === 'all' && action.action === 'create') continue;
-        groupRefs.push({ name: action.name, type: action.adtType });
+        const key = `${action.adtType}:${action.name}`.toUpperCase();
+        if (inactiveSet.has(key)) {
+          groupRefs.push({ name: action.name, type: action.adtType });
+        }
       }
 
       if (groupRefs.length === 0) continue;
 
       logVerbose(
         2,
-        `  [GROUP ${group.id}] Activating ${groupRefs.length} object(s)...`,
+        `  [GROUP ${group.id}] Activating ${groupRefs.length} inactive object(s)...`,
       );
 
+      let hasErrors = false;
       try {
-        await client.getUtils().activateObjectsGroup(groupRefs, true);
-        activated += groupRefs.length;
-        for (const ref of groupRefs) {
-          logVerbose(2, `    OK ${ref.type} ${ref.name}`);
+        const result = await client
+          .getUtils()
+          .activateObjectsGroup(groupRefs, true);
+        // Parse activation result messages
+        if (result?.data) {
+          const parsed = xmlParser.parse(
+            typeof result.data === 'string' ? result.data : String(result.data),
+          );
+          const msgs = parsed?.['chkl:messages']?.msg;
+          if (msgs) {
+            const msgArray = Array.isArray(msgs) ? msgs : [msgs];
+            for (const msg of msgArray) {
+              const type = msg['@_type'] || 'info';
+              const text = msg?.shortText?.txt || msg?.shortText || String(msg);
+              if (type === 'E') hasErrors = true;
+              logVerbose(2, `    [${type}] ${text}`);
+            }
+          }
         }
       } catch (error) {
+        hasErrors = true;
         const message = error instanceof Error ? error.message : String(error);
-        failed += groupRefs.length;
-        logVerbose(1, `  [!] Group ${group.id} activation failed: ${message}`);
+        logVerbose(2, `  [*] Activation request completed (${message})`);
+      }
+
+      // Poll until objects are no longer inactive (max 5 retries, 10s apart)
+      // Skip polling if activation returned errors (no point waiting)
+      if (!hasErrors) {
+        const maxRetries = 5;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          const postResult = await client.getUtils().getInactiveObjects();
+          const postInactiveSet = new Set(
+            postResult.objects.map((o) => `${o.type}:${o.name}`.toUpperCase()),
+          );
+          const stillInactive = groupRefs.filter((r) =>
+            postInactiveSet.has(`${r.type}:${r.name}`.toUpperCase()),
+          );
+          if (stillInactive.length === 0) break;
+          if (attempt < maxRetries) {
+            logVerbose(
+              2,
+              `  [*] ${stillInactive.length} still inactive, waiting... (${attempt}/${maxRetries})`,
+            );
+            await new Promise((resolve) => setTimeout(resolve, 10000));
+          }
+        }
+      }
+
+      // Report per-object status
+      const finalResult = await client.getUtils().getInactiveObjects();
+      const finalInactiveSet = new Set(
+        finalResult.objects.map((o) => `${o.type}:${o.name}`.toUpperCase()),
+      );
+      for (const ref of groupRefs) {
+        const key = `${ref.type}:${ref.name}`.toUpperCase();
+        if (finalInactiveSet.has(key)) {
+          logVerbose(2, `    INACTIVE ${ref.type} ${ref.name}`);
+          failed++;
+        } else {
+          logVerbose(2, `    OK ${ref.type} ${ref.name}`);
+          activated++;
+        }
       }
     }
 
-    skipped = allActions.length - activated - failed;
     console.log(
-      `Activation complete: ${activated} activated, ${skipped} skipped, ${failed} failed`,
+      `Activation complete: ${activated} activated, ${alreadyActive} already active, ${failed} still inactive`,
     );
     return;
   }
