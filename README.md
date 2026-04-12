@@ -1,4 +1,5 @@
 # @mcp-abap-adt/adt-backup
+[![Stand With Ukraine](https://raw.githubusercontent.com/vshymanskyy/StandWithUkraine/main/badges/StandWithUkraine.svg)](https://stand-with-ukraine.pp.ua)
 
 CLI for recursive ADT backups and restores using `@mcp-abap-adt/adt-clients`.
 
