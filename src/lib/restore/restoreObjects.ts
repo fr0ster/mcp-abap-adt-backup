@@ -16,6 +16,7 @@ const ADT_TYPE_MAP: Partial<Record<string, string>> = {
   class: 'CLAS/OC',
   interface: 'INTF/OI',
   program: 'PROG/P',
+  transformation: 'XSLT/VT',
   functionGroup: 'FUGR/FF',
   functionModule: 'FUGR/I',
   serviceDefinition: 'SRVD/SRV',

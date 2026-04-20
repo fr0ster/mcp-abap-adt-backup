@@ -13,6 +13,7 @@ const supportedTypes: SupportedType[] = [
   'class',
   'interface',
   'program',
+  'transformation',
   'functionGroup',
   'serviceDefinition',
   'serviceBinding',

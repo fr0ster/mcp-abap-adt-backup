@@ -46,6 +46,11 @@ const RESTORE_PHASES: RestorePhase[] = [
   { name: 'Interfaces', types: ['interface'], activation: 'individual' },
   { name: 'Programs', types: ['program'], activation: 'individual' },
   {
+    name: 'Transformations',
+    types: ['transformation'],
+    activation: 'individual',
+  },
+  {
     name: 'Function Groups',
     types: ['functionGroup'],
     activation: 'individual',

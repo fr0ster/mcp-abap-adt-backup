@@ -77,9 +77,11 @@ Common commands:
 ## Roadmap & Support
 Refer to `docs/roadmap.yaml` for the current status of supported ABAP object types. Currently supports most core types including:
 - Packages, Classes, Interfaces, Programs
+- Transformations (XSLT/ST, SimpleTransformation)
 - Function Groups & Modules
 - Tables, Views, Data Elements, Domains, Table Types
-- CDS (Data Definitions, Metadata Extensions, Service Definitions, Service Bindings)
+- CDS (Data Definitions, Metadata Extensions, Service Definitions, Service Bindings — incl. publication state)
 - Behavior Definitions & Implementations
+- Access Control
 - Enhancements
 - Unit Tests (Class-based and CDS)

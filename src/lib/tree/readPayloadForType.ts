@@ -13,6 +13,7 @@ export async function readPayloadForType(
     case 'class':
     case 'interface':
     case 'program':
+    case 'transformation':
     case 'view':
     case 'structure':
     case 'table':

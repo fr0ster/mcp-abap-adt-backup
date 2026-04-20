@@ -27,6 +27,12 @@ export async function readSourceText(
           .read({ programName: spec.name }, version);
         return responseToText(state?.readResult);
       }
+      case 'transformation': {
+        const state = await client
+          .getTransformation()
+          .read({ transformationName: spec.name }, version);
+        return responseToText(state?.readResult);
+      }
       case 'view': {
         const state = await client
           .getView()

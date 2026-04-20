@@ -79,6 +79,7 @@ See `docs/roadmap.yaml` for per-object backup/restore status and the plan for re
 | `interface` | implemented | implemented | source |
 | `class` | implemented | implemented | source |
 | `program` | implemented | implemented | source |
+| `transformation` | implemented | implemented | source |
 | `serviceDefinition` | implemented | implemented | source |
 | `serviceBinding` | implemented | implemented | metadata-xml |
 | `metadataExtension` | implemented | implemented | source |
@@ -89,6 +90,10 @@ See `docs/roadmap.yaml` for per-object backup/restore status and the plan for re
 | `cdsUnitTest` | implemented | implemented | as class |
 
 > **Note**: Unit tests are stored as classes in backups. When restoring, they are created as test classes in the system.
+
+> **Note**: For `transformation`, the subtype (`SimpleTransformation` for `XSLT/VT` vs `XSLTProgram` for `XSLT/ST`) is detected from the source header (`<?sap.transform simple?>`).
+
+> **Note**: For `serviceBinding`, the publication state (`srvb:published`) is preserved in the backup and re-applied during restore — published bindings are re-published, unpublished bindings are unpublished.
 
 ## Smoke Checklist
 

@@ -25,6 +25,8 @@ export function mapAdtTypeToSupported(
     'INTF/IF': 'interface',
     'INTF/OI': 'interface',
     'PROG/P': 'program',
+    'XSLT/VT': 'transformation',
+    'XSLT/ST': 'transformation',
     'FUGR/FF': 'functionModule',
     'FUGR/F': 'functionGroup',
     FUGR: 'functionGroup',
@@ -46,6 +48,7 @@ export function mapAdtTypeToSupported(
   if (normalized.startsWith('CLAS/')) return 'class';
   if (normalized.startsWith('INTF/')) return 'interface';
   if (normalized.startsWith('PROG/')) return 'program';
+  if (normalized.startsWith('XSLT/')) return 'transformation';
   if (normalized.startsWith('DDLS/')) return 'view';
   if (normalized.startsWith('DDLX/')) return 'metadataExtension';
   if (normalized.startsWith('SRVD/')) return 'serviceDefinition';

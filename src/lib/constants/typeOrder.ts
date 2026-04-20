@@ -13,6 +13,7 @@ export const typeOrder: SupportedType[] = [
   'interface',
   'class',
   'program',
+  'transformation',
   'serviceDefinition',
   'serviceBinding',
   'metadataExtension',

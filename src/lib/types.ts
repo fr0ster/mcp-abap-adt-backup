@@ -9,6 +9,7 @@ export type SupportedType =
   | 'class'
   | 'interface'
   | 'program'
+  | 'transformation'
   | 'functionGroup'
   | 'functionModule'
   | 'serviceDefinition'

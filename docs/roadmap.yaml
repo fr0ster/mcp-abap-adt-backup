@@ -72,6 +72,14 @@ objectTypes:
       payload: source
     restore:
       status: implemented
+  transformation:
+    backup:
+      status: implemented
+      payload: source
+      note: "XSLT/VT (SimpleTransformation) and XSLT/ST (XSLTProgram)"
+    restore:
+      status: implemented
+      note: "Transformation type detected from source: '<?sap.transform simple?>' header => SimpleTransformation, otherwise XSLTProgram"
   serviceDefinition:
     backup:
       status: implemented
@@ -84,6 +92,7 @@ objectTypes:
       payload: metadata-xml
     restore:
       status: implemented
+      note: "Publication state (srvb:published) is preserved: published bindings are re-published, unpublished bindings are unpublished"
   metadataExtension:
     backup:
       status: implemented

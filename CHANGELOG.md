@@ -8,6 +8,26 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+## [1.3.0] - 2026-04-20
+
+### Added
+- **Transformation support:** New object type `transformation` covering both `XSLT/VT` (SimpleTransformation) and `XSLT/ST` (XSLTProgram). Backup, restore, verify, and dependency analysis all handle the new type. Subtype is detected from the source header (`<?sap.transform simple?>` => SimpleTransformation, otherwise XSLTProgram).
+- **Service binding publication state:** `parseServiceBindingConfig` now reads the `srvb:published` attribute and sets `desiredPublicationState` accordingly, so restore re-publishes/unpublishes bindings to match the source system.
+- New helper `utils/detectTransformationType.ts`.
+
+### Changed
+- **Dependency upgrades:**
+  - `@mcp-abap-adt/adt-clients` `^2.2.0` → `^5.4.1` (major). The new `IServiceBindingConfig` exposes a single `bindingVariant` field (`ODATA_V2_UI` / `ODATA_V2_WEB_API` / `ODATA_V4_UI` / `ODATA_V4_WEB_API`) instead of separate `bindingType`/`bindingVersion`/`bindingCategory`; `parseServiceBindingConfig` now derives `bindingVariant` from XML.
+  - `@mcp-abap-adt/auth-stores` `^1.0.2` → `^1.0.4`
+  - `@mcp-abap-adt/connection` `^1.1.0` → `^1.8.0`
+  - `fast-xml-parser` `^5.4.1` → `^5.7.1`
+  - `yaml` `^2.8.2` → `^2.8.3`
+  - `@biomejs/biome` `^2.4.4` → `^2.4.12`
+  - `@types/node` `^25.3.1` → `^25.6.0`
+  - `typescript` `^5.9.2` → `^6.0.3` (major)
+- **Engines:** `node >=18.0.0` → `node >=20.0.0` (Node 18 reached EOL).
+- **TypeScript config:** added `types: ["node"]` (TS 6 no longer auto-includes `@types/node`) and `ignoreDeprecations: "6.0"` for `moduleResolution: node`.
+
 ## [1.2.0] - 2026-03-04
 
 ### Changed

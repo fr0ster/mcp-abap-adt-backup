@@ -264,6 +264,7 @@ const TYPE_CREATION_ORDER: Record<string, number> = {
   accessControl: 6,
   metadataExtension: 6,
   program: 7,
+  transformation: 7,
   functionGroup: 7,
   functionModule: 8,
   serviceDefinition: 9,

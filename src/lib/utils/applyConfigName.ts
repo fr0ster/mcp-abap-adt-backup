@@ -38,6 +38,9 @@ export function applyConfigName(
     case 'program':
       finalConfig.programName = name;
       break;
+    case 'transformation':
+      finalConfig.transformationName = name;
+      break;
     case 'functionGroup':
       finalConfig.functionGroupName = name;
       break;

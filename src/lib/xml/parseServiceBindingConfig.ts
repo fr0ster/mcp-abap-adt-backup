@@ -64,9 +64,21 @@ export function parseServiceBindingConfig(
     getNodeAttribute(binding, 'srvb:category') ||
     findAttribute(binding, 'srvb:category');
 
-  // Keep publication state unchanged by default during restore updates.
-  const desiredPublicationState: IServiceBindingConfig['desiredPublicationState'] =
+  // Reflect the published state from ADT so restore re-publishes/unpublishes
+  // the binding to match the source system. Attribute: srvb:published="true|false".
+  const publishedAttr =
+    getNodeAttribute(root, 'srvb:published') ||
+    findAttribute(root, 'srvb:published');
+  let desiredPublicationState: IServiceBindingConfig['desiredPublicationState'] =
     'unchanged';
+  if (publishedAttr !== undefined && publishedAttr !== null) {
+    const normalized = String(publishedAttr).toLowerCase();
+    if (normalized === 'true') {
+      desiredPublicationState = 'published';
+    } else if (normalized === 'false') {
+      desiredPublicationState = 'unpublished';
+    }
+  }
 
   const normalizedBindingType = bindingType?.toUpperCase();
   const normalizedBindingVersion = bindingVersion?.toUpperCase();
@@ -77,6 +89,17 @@ export function parseServiceBindingConfig(
         : 'odatav4'
       : undefined;
 
+  const bindingVariant: IServiceBindingConfig['bindingVariant'] | undefined =
+    normalizedBindingType === 'ODATA'
+      ? normalizedBindingVersion === 'V2'
+        ? bindingCategory === '1'
+          ? 'ODATA_V2_WEB_API'
+          : 'ODATA_V2_UI'
+        : bindingCategory === '1'
+          ? 'ODATA_V4_WEB_API'
+          : 'ODATA_V4_UI'
+      : undefined;
+
   return {
     bindingName,
     packageName,
@@ -84,9 +107,7 @@ export function parseServiceBindingConfig(
     serviceDefinitionName,
     serviceName,
     serviceVersion,
-    bindingType: normalizedBindingType as IServiceBindingConfig['bindingType'],
-    bindingVersion,
-    bindingCategory,
+    bindingVariant,
     masterLanguage,
     masterSystem,
     responsible,

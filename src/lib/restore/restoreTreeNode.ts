@@ -18,12 +18,14 @@ import type {
   IStructureConfig,
   ITableConfig,
   ITableTypeConfig,
+  ITransformationConfig,
   IViewConfig,
 } from '@mcp-abap-adt/adt-clients';
 import { logVerbose } from '../cli/logVerbose';
 import { decodeBase64 } from '../crypto/decodeBase64';
 import type { BackupTreeNode, RestoreMode } from '../types';
 import { asConfig } from '../utils/asConfig';
+import { detectTransformationType } from '../utils/detectTransformationType';
 import { ensureDescription } from '../utils/ensureDescription';
 import { parseBdefSource } from '../utils/parseBdefSource';
 import { parsePackageConfig } from '../xml/parsePackageConfig';
@@ -252,6 +254,25 @@ export async function restoreTreeNode(
           await client.getProgram().update(
             asConfig<IProgramConfig>({
               ...config,
+              sourceCode: payload,
+            }),
+            options,
+          );
+        }
+        return;
+      }
+      case 'transformation': {
+        const transformationType = detectTransformationType(payload);
+        const baseTxConfig = { ...config, transformationType };
+        if (mode !== 'update') {
+          await client
+            .getTransformation()
+            .create(asConfig<ITransformationConfig>(baseTxConfig), options);
+        }
+        if (payload) {
+          await client.getTransformation().update(
+            asConfig<ITransformationConfig>({
+              ...baseTxConfig,
               sourceCode: payload,
             }),
             options,

@@ -17,6 +17,7 @@ const WHERE_USED_TYPE_MAP: Partial<Record<SupportedType, string>> = {
   class: 'CLAS/OC',
   interface: 'INTF/IF',
   program: 'PROG/P',
+  transformation: 'XSLT/VT',
   functionGroup: 'FUGR/F',
   functionModule: 'FUGR/FF',
   serviceDefinition: 'SRVD/SRV',

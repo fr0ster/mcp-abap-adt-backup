@@ -29,6 +29,13 @@ export async function readBasicMetadata(
       const xml = responseToText(state.metadataResult);
       return xml ? extractMetadata(xml) : {};
     }
+    case 'transformation': {
+      const state = await client
+        .getTransformation()
+        .readMetadata({ transformationName: spec.name });
+      const xml = responseToText(state.metadataResult);
+      return xml ? extractMetadata(xml) : {};
+    }
     case 'structure': {
       const state = await client
         .getStructure()

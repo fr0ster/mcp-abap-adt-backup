@@ -86,7 +86,7 @@ The format is tracked per node in `codeFormat` and determines how backup/restore
 
 ### Key Types (`src/lib/types.ts`)
 
-- `SupportedType` — Union of ~20 supported ABAP object types
+- `SupportedType` — Union of ~22 supported ABAP object types (incl. `transformation` for XSLT/ST and SimpleTransformation)
 - `BackupFile` / `BackupTreeFile` — The two backup formats
 - `BackupTreeNode` — Tree node with optional `codeBase64`, `config`, `children`, `codeFormat`, `usedBy`
 - `RestorePlan` / `RestorePlanGroup` / `RestorePlanAction` — Restore execution plan

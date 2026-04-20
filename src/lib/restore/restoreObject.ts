@@ -17,11 +17,13 @@ import type {
   IStructureConfig,
   ITableConfig,
   ITableTypeConfig,
+  ITransformationConfig,
   IViewConfig,
 } from '@mcp-abap-adt/adt-clients';
 import type { BackupObject, RestoreMode } from '../types';
 import { applyConfigName } from '../utils/applyConfigName';
 import { asConfig } from '../utils/asConfig';
+import { detectTransformationType } from '../utils/detectTransformationType';
 import { ensureDescription } from '../utils/ensureDescription';
 import { applyTransportRequest } from './applyTransportRequest';
 
@@ -175,6 +177,28 @@ export async function restoreObject(
         await client.getProgram().update(
           asConfig<IProgramConfig>({
             ...config,
+            sourceCode: obj.source,
+          }),
+          options,
+        );
+      }
+      return;
+    }
+    case 'transformation': {
+      const transformationType = detectTransformationType(obj.source);
+      const baseTxConfig = {
+        ...config,
+        transformationType,
+      };
+      if (mode !== 'update') {
+        await client
+          .getTransformation()
+          .create(asConfig<ITransformationConfig>(baseTxConfig), options);
+      }
+      if (obj.source) {
+        await client.getTransformation().update(
+          asConfig<ITransformationConfig>({
+            ...baseTxConfig,
             sourceCode: obj.source,
           }),
           options,
