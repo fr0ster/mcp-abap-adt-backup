@@ -127,3 +127,7 @@ Short imperative summaries, <= 72 chars. Use scope when useful (e.g., `cli: hand
 - `@mcp-abap-adt/auth-broker` / `auth-providers` / `auth-stores` — Authentication ecosystem
 - `fast-xml-parser` — XML parsing for ADT responses
 - `yaml` — YAML serialization for backup files
+
+## Plans and Specs
+
+After a plan under `docs/superpowers/plans/` or spec under `docs/superpowers/specs/` has been fully implemented, delete the file. Keep only active (not yet implemented) plans and specs in the tree — implementation history lives in git, not in these directories.
