@@ -7,6 +7,7 @@ import type {
   IDomainConfig,
   IEnhancementConfig,
   IFunctionGroupConfig,
+  IFunctionIncludeConfig,
   IFunctionModuleConfig,
   IInterfaceConfig,
   IMetadataExtensionConfig,
@@ -233,6 +234,22 @@ export async function restoreObject(
           }),
           options,
         );
+      }
+      return;
+    }
+    case 'functionInclude': {
+      const fgn = (obj.functionGroupName ?? '').toUpperCase();
+      // The TOP include is auto-created with the function group, so it can only
+      // be updated (a create would fail "already exists"). Custom includes are
+      // created — the create chain uploads source and activates.
+      const isTop = obj.name.toUpperCase() === `L${fgn}TOP`;
+      const cfg = asConfig<IFunctionIncludeConfig>(
+        obj.source ? { ...config, sourceCode: obj.source } : config,
+      );
+      if (!isTop && mode !== 'update') {
+        await client.getFunctionInclude().create(cfg, options);
+      } else if (obj.source) {
+        await client.getFunctionInclude().update(cfg, options);
       }
       return;
     }

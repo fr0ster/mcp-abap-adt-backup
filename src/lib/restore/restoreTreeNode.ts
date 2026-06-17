@@ -8,6 +8,7 @@ import type {
   IDomainConfig,
   IEnhancementConfig,
   IFunctionGroupConfig,
+  IFunctionIncludeConfig,
   IFunctionModuleConfig,
   IInterfaceConfig,
   IMetadataExtensionConfig,
@@ -306,6 +307,22 @@ export async function restoreTreeNode(
             }),
             options,
           );
+        }
+        return;
+      }
+      case 'functionInclude': {
+        const fgn = (node.functionGroupName ?? '').toUpperCase();
+        // The TOP include is auto-created with the function group, so it can
+        // only be updated (a create would fail "already exists"). Custom
+        // includes are created — the create chain uploads source and activates.
+        const isTop = node.name.toUpperCase() === `L${fgn}TOP`;
+        const cfg = asConfig<IFunctionIncludeConfig>(
+          payload ? { ...config, sourceCode: payload } : config,
+        );
+        if (!isTop && mode !== 'update') {
+          await client.getFunctionInclude().create(cfg, options);
+        } else if (payload) {
+          await client.getFunctionInclude().update(cfg, options);
         }
         return;
       }

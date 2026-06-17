@@ -11,6 +11,7 @@ export function isRestoreImplemented(type?: SupportedType): boolean {
     case 'view':
     case 'functionGroup':
     case 'functionModule':
+    case 'functionInclude':
     case 'interface':
     case 'class':
     case 'program':

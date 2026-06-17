@@ -9,6 +9,7 @@ export const typeOrder: SupportedType[] = [
   'tableType',
   'view',
   'functionGroup',
+  'functionInclude',
   'functionModule',
   'interface',
   'class',

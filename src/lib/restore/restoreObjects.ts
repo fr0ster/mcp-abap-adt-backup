@@ -19,6 +19,7 @@ const ADT_TYPE_MAP: Partial<Record<string, string>> = {
   transformation: 'XSLT/VT',
   functionGroup: 'FUGR/FF',
   functionModule: 'FUGR/I',
+  functionInclude: 'FUGR/I',
   serviceDefinition: 'SRVD/SRV',
   serviceBinding: 'SRVB/SRV',
   metadataExtension: 'DDLX/PX',

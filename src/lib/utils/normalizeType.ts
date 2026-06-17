@@ -24,6 +24,8 @@ export function normalizeType(rawType: string): SupportedType {
     function_group: 'functionGroup',
     functionmodule: 'functionModule',
     function_module: 'functionModule',
+    functioninclude: 'functionInclude',
+    function_include: 'functionInclude',
     servicedefinition: 'serviceDefinition',
     service_definition: 'serviceDefinition',
     servicebinding: 'serviceBinding',

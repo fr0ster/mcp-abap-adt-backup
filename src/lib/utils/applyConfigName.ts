@@ -48,6 +48,10 @@ export function applyConfigName(
       finalConfig.functionModuleName = name;
       finalConfig.functionGroupName = functionGroupName;
       break;
+    case 'functionInclude':
+      finalConfig.includeName = name;
+      finalConfig.functionGroupName = functionGroupName;
+      break;
     case 'serviceDefinition':
       finalConfig.serviceDefinitionName = name;
       break;

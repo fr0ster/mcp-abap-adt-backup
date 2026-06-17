@@ -3,7 +3,7 @@ import type { BackupTreeNode } from '../types';
 export function getNodeFunctionGroupName(
   node: BackupTreeNode,
 ): string | undefined {
-  if (node.type !== 'functionModule') {
+  if (node.type !== 'functionModule' && node.type !== 'functionInclude') {
     return undefined;
   }
   const configGroup =
