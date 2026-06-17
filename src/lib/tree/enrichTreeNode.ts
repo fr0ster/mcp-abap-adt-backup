@@ -104,9 +104,39 @@ export async function enrichTreeNode(
     }
   }
 
-  if (node.children && node.children.length > 0) {
+  // A function group's function modules (FUGR/FF) and includes (FUGR/I) are not
+  // returned by the package hierarchy — enumerate them and attach as children so
+  // their source is captured. Skip the generated `L<FUGR>UXX` collector (no
+  // developer content; regenerated on restore).
+  const childNodes: BackupTreeNode[] = node.children ? [...node.children] : [];
+  if (mappedType === 'functionGroup' && includeCode) {
+    const utils = client.getUtils();
+    const [fmNames, includeNames] = await Promise.all([
+      utils.listFunctionModules(node.name),
+      utils.listFunctionGroupIncludes(node.name),
+    ]);
+    const generatedCollector = `L${node.name.toUpperCase()}UXX`;
+    const enumerated: BackupTreeNode[] = [
+      ...fmNames.map((name) => ({ name, adtType: 'FUGR/FF' })),
+      ...includeNames
+        .filter((name) => name.toUpperCase() !== generatedCollector)
+        .map((name) => ({ name, adtType: 'FUGR/I' })),
+    ];
+    const present = new Set(childNodes.map((c) => c.name.toUpperCase()));
+    for (const child of enumerated) {
+      if (!present.has(child.name.toUpperCase())) {
+        childNodes.push(child);
+      }
+    }
+    logVerbose(
+      2,
+      `  FUGR ${node.name}: +${fmNames.length} FM, +${enumerated.length - fmNames.length} include(s)`,
+    );
+  }
+
+  if (childNodes.length > 0) {
     const children: BackupTreeNode[] = [];
-    for (const child of node.children) {
+    for (const child of childNodes) {
       children.push(
         await enrichTreeNode(child, client, includeCode, functionGroupName),
       );

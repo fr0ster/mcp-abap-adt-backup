@@ -12,6 +12,7 @@ export type SupportedType =
   | 'transformation'
   | 'functionGroup'
   | 'functionModule'
+  | 'functionInclude'
   | 'serviceDefinition'
   | 'serviceBinding'
   | 'metadataExtension'

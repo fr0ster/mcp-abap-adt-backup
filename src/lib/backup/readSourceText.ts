@@ -92,6 +92,19 @@ export async function readSourceText(
         );
         return responseToText(state?.readResult);
       }
+      case 'functionInclude': {
+        if (!spec.functionGroupName) return undefined;
+        // read() returns the include source (adt-clients >= 5.8.0), consistent
+        // with class/program/functionModule.
+        const state = await client.getFunctionInclude().read(
+          {
+            functionGroupName: spec.functionGroupName,
+            includeName: spec.name,
+          },
+          version,
+        );
+        return responseToText(state?.readResult);
+      }
       case 'enhancement': {
         const state = await client
           .getEnhancement()
