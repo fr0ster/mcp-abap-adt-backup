@@ -18,6 +18,7 @@ export async function readPayloadForType(
     case 'structure':
     case 'table':
     case 'functionModule':
+    case 'functionInclude':
     case 'serviceDefinition':
     case 'metadataExtension':
     case 'behaviorDefinition':

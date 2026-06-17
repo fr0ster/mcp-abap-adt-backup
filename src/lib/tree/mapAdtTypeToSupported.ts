@@ -28,6 +28,7 @@ export function mapAdtTypeToSupported(
     'XSLT/VT': 'transformation',
     'XSLT/ST': 'transformation',
     'FUGR/FF': 'functionModule',
+    'FUGR/I': 'functionInclude',
     'FUGR/F': 'functionGroup',
     FUGR: 'functionGroup',
     'SRVD/SRV': 'serviceDefinition',
@@ -60,6 +61,7 @@ export function mapAdtTypeToSupported(
   if (normalized.startsWith('TABL/DT')) return 'table';
   if (normalized.startsWith('TTYP/')) return 'tableType';
   if (normalized.startsWith('FUGR/FF')) return 'functionModule';
+  if (normalized.startsWith('FUGR/I')) return 'functionInclude';
   if (normalized.startsWith('FUGR/')) return 'functionGroup';
   if (normalized.startsWith('DEVC/')) return 'package';
   if (normalized.startsWith('BDEF/')) return 'behaviorDefinition';

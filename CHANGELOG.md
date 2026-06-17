@@ -8,6 +8,15 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+## [1.4.0] - 2026-06-17
+
+### Added
+- **Function group children in package backups.** When backing up a package, each function group now captures its **function modules** (`FUGR/FF`) and **includes** (`FUGR/I` — TOP global data + custom includes) as children, with their source. These are not exposed by the package hierarchy; they are enumerated via `getUtils().listFunctionModules()` / `listFunctionGroupIncludes()`. The generated `L<FUGR>UXX` collector is skipped (no developer content; regenerated on restore). Function modules restore as before (`ok`); includes are captured with `restoreStatus: not-implemented` for now (restore is feasible via `getFunctionInclude().create()` and a follow-up).
+- New `SupportedType` value `functionInclude` (`FUGR/I` mapping; source read via `getFunctionInclude().read()`).
+
+### Changed
+- `@mcp-abap-adt/adt-clients` `^5.4.1` → `^5.8.0` (adds `listFunctionModules`/`listFunctionGroupIncludes`; `getFunctionInclude().read()` now returns source; `delete()` surfaces server-refused deletions).
+
 ## [1.3.0] - 2026-04-20
 
 ### Added
