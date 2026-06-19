@@ -8,6 +8,11 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+## [1.5.0] - 2026-06-19
+
+### Added
+- **Restore of function-group includes.** `functionInclude` is now restore-implemented (it was `restoreStatus: not-implemented` in 1.4.0): the TOP include (`L<FUGR>TOP`, auto-created with the function group) is restored by updating its source only; custom includes are created and then sourced. Wired through `restoreObject` / `restoreTreeNode` (TOP-vs-custom branch), `verify` (`readMetadataXmlForType` reads include metadata via `getFunctionInclude().readMetadata()`), dependency ordering (`functionInclude` after `functionGroup`, before `functionModule`), and the `GROUP|NAME` object-spec helpers (`getNodeObjectSpec`, `objectId`, `formatObjectSpec`, `parseObjectSpec`, `applyConfigName`, `normalizeType`, `typeOrder`, `analyzeDependencies`). The underlying `getFunctionInclude().create()/update()/activate()` primitives are verified on a real system.
+
 ## [1.4.0] - 2026-06-17
 
 ### Added
