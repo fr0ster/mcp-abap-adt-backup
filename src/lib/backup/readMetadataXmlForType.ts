@@ -6,7 +6,7 @@ export async function readMetadataXmlForType(
   client: AdtClient,
   type: SupportedType,
   name: string,
-  _functionGroupName?: string,
+  functionGroupName?: string,
 ): Promise<string | null | undefined> {
   try {
     let result: string | undefined;
@@ -107,6 +107,16 @@ export async function readMetadataXmlForType(
         const state = await client
           .getFunctionGroup()
           .readMetadata({ functionGroupName: name });
+        result = responseToText(state.metadataResult);
+        break;
+      }
+      case 'functionInclude': {
+        if (!functionGroupName) {
+          return undefined;
+        }
+        const state = await client
+          .getFunctionInclude()
+          .readMetadata({ functionGroupName, includeName: name });
         result = responseToText(state.metadataResult);
         break;
       }

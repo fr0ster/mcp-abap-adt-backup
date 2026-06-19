@@ -140,7 +140,7 @@ export async function restoreTreeBackup(
     if (refs.length === 0) return;
 
     // Check which objects are actually inactive
-    let toActivate = await findInactiveRefs(refs);
+    const toActivate = await findInactiveRefs(refs);
     if (toActivate.length === 0) {
       logVerbose(
         2,

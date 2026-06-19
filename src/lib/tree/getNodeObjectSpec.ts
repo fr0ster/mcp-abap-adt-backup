@@ -7,7 +7,7 @@ export function getNodeObjectSpec(
   if (!node.type) {
     return undefined;
   }
-  if (node.type === 'functionModule') {
+  if (node.type === 'functionModule' || node.type === 'functionInclude') {
     const group = getNodeFunctionGroupName(node);
     if (!group) {
       return undefined;

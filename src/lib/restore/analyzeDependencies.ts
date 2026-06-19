@@ -266,10 +266,11 @@ const TYPE_CREATION_ORDER: Record<string, number> = {
   program: 7,
   transformation: 7,
   functionGroup: 7,
-  functionModule: 8,
-  serviceDefinition: 9,
-  serviceBinding: 10,
-  enhancement: 11,
+  functionInclude: 8,
+  functionModule: 9,
+  serviceDefinition: 10,
+  serviceBinding: 11,
+  enhancement: 12,
 };
 
 /**
