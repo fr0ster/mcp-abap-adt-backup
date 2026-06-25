@@ -33,10 +33,10 @@ export async function readSourceText(
           .read({ transformationName: spec.name }, version);
         return responseToText(state?.readResult);
       }
-      case 'view': {
+      case 'ddl': {
         const state = await client
-          .getView()
-          .read({ viewName: spec.name }, version);
+          .getDdl()
+          .read({ ddlName: spec.name }, version);
         return responseToText(state?.readResult);
       }
       case 'table': {

@@ -9,7 +9,7 @@ const supportedTypes: SupportedType[] = [
   'structure',
   'table',
   'tableType',
-  'view',
+  'ddl',
   'class',
   'interface',
   'program',

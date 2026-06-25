@@ -63,8 +63,8 @@ export async function readMetadataXmlForType(
         result = responseToText(state.metadataResult);
         break;
       }
-      case 'view': {
-        const state = await client.getView().readMetadata({ viewName: name });
+      case 'ddl': {
+        const state = await client.getDdl().readMetadata({ ddlName: name });
         result = responseToText(state.metadataResult);
         break;
       }

@@ -13,7 +13,7 @@ const WHERE_USED_TYPE_MAP: Partial<Record<SupportedType, string>> = {
   dataElement: 'DTEL/DE',
   structure: 'STRU/DT',
   table: 'TABL/DT',
-  view: 'DDLS/DF',
+  ddl: 'DDLS/DF',
   class: 'CLAS/OC',
   interface: 'INTF/IF',
   program: 'PROG/P',

@@ -4,6 +4,7 @@ import type {
   IBehaviorImplementationConfig,
   IClassConfig,
   IDataElementConfig,
+  IDdlConfig,
   IDomainConfig,
   IEnhancementConfig,
   IFunctionGroupConfig,
@@ -19,7 +20,6 @@ import type {
   ITableConfig,
   ITableTypeConfig,
   ITransformationConfig,
-  IViewConfig,
 } from '@mcp-abap-adt/adt-clients';
 import type { BackupObject, RestoreMode } from '../types';
 import { applyConfigName } from '../utils/applyConfigName';
@@ -122,15 +122,15 @@ export async function restoreObject(
       }
       return;
     }
-    case 'view': {
+    case 'ddl': {
       if (mode !== 'update') {
-        await client.getView().create(asConfig<IViewConfig>(config), options);
+        await client.getDdl().create(asConfig<IDdlConfig>(config), options);
       }
       if (obj.source) {
         await client
-          .getView()
+          .getDdl()
           .update(
-            asConfig<IViewConfig>({ ...config, ddlSource: obj.source }),
+            asConfig<IDdlConfig>({ ...config, ddlSource: obj.source }),
             options,
           );
       }

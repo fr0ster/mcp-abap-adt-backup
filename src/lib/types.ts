@@ -5,7 +5,7 @@ export type SupportedType =
   | 'structure'
   | 'table'
   | 'tableType'
-  | 'view'
+  | 'ddl'
   | 'class'
   | 'interface'
   | 'program'

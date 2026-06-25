@@ -8,7 +8,7 @@ export function isRestoreImplemented(type?: SupportedType): boolean {
     case 'structure':
     case 'table':
     case 'tableType':
-    case 'view':
+    case 'ddl':
     case 'functionGroup':
     case 'functionModule':
     case 'functionInclude':

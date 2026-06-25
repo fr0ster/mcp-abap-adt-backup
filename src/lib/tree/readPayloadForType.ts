@@ -14,7 +14,7 @@ export async function readPayloadForType(
     case 'interface':
     case 'program':
     case 'transformation':
-    case 'view':
+    case 'ddl':
     case 'structure':
     case 'table':
     case 'functionModule':

@@ -19,7 +19,7 @@ export function mapAdtTypeToSupported(
     'TABL/DT': 'table',
     'TTYP/DF': 'tableType',
     'TTYP/TT': 'tableType',
-    'DDLS/DF': 'view',
+    'DDLS/DF': 'ddl',
     'DDLX/EX': 'metadataExtension',
     'CLAS/OC': 'class',
     'INTF/IF': 'interface',
@@ -50,7 +50,7 @@ export function mapAdtTypeToSupported(
   if (normalized.startsWith('INTF/')) return 'interface';
   if (normalized.startsWith('PROG/')) return 'program';
   if (normalized.startsWith('XSLT/')) return 'transformation';
-  if (normalized.startsWith('DDLS/')) return 'view';
+  if (normalized.startsWith('DDLS/')) return 'ddl';
   if (normalized.startsWith('DDLX/')) return 'metadataExtension';
   if (normalized.startsWith('SRVD/')) return 'serviceDefinition';
   if (normalized.startsWith('SRVB/')) return 'serviceBinding';

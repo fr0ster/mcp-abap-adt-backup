@@ -7,7 +7,7 @@ export const typeOrder: SupportedType[] = [
   'structure',
   'table',
   'tableType',
-  'view',
+  'ddl',
   'functionGroup',
   'functionInclude',
   'functionModule',

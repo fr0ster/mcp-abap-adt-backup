@@ -16,7 +16,7 @@ export async function buildPackageBackupTree(
     .getPackageHierarchy(packageNameUpper);
 
   const rootTree: BackupTreeNode = {
-    ...hierarchy,
+    ...(hierarchy as unknown as BackupTreeNode),
     restoreStatus: 'not-implemented',
   };
 

@@ -12,7 +12,7 @@ const ADT_TYPE_MAP: Partial<Record<string, string>> = {
   structure: 'TABL/DT',
   table: 'TABL/DT',
   tableType: 'TTYP/DT',
-  view: 'VIEW/DV',
+  ddl: 'DDLS/DF',
   class: 'CLAS/OC',
   interface: 'INTF/OI',
   program: 'PROG/P',

@@ -26,8 +26,8 @@ export function applyConfigName(
     case 'tableType':
       finalConfig.tableTypeName = name;
       break;
-    case 'view':
-      finalConfig.viewName = name;
+    case 'ddl':
+      finalConfig.ddlName = name;
       break;
     case 'class':
       finalConfig.className = name;

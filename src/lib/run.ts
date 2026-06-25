@@ -197,7 +197,10 @@ export async function run(): Promise<void> {
     const hierarchy = await client
       .getUtils()
       .getPackageHierarchy(packageName.toUpperCase());
-    const rootTree: BackupTreeNode = { ...hierarchy, restoreStatus: 'ok' };
+    const rootTree: BackupTreeNode = {
+      ...(hierarchy as unknown as BackupTreeNode),
+      restoreStatus: 'ok',
+    };
     const enrichedRoot = await enrichTreeNode(rootTree, client, false);
     await collectTreeDependencies(client, enrichedRoot);
 
