@@ -15,6 +15,7 @@ import type {
   IMetadataExtensionConfig,
   IPackageConfig,
   IProgramConfig,
+  IScalarFunctionConfig,
   IServiceBindingConfig,
   IServiceDefinitionConfig,
   IStructureConfig,
@@ -479,6 +480,23 @@ export async function restoreTreeNode(
         await client
           .getTableType()
           .update(asConfig<ITableTypeConfig>(config), options);
+        return;
+      }
+      case 'scalarFunction': {
+        if (mode !== 'update') {
+          await client
+            .getScalarFunction()
+            .create(asConfig<IScalarFunctionConfig>(config), options);
+        }
+        if (payload) {
+          await client.getScalarFunction().update(
+            asConfig<IScalarFunctionConfig>({
+              ...config,
+              sourceCode: payload,
+            }),
+            options,
+          );
+        }
         return;
       }
     }

@@ -257,6 +257,7 @@ const TYPE_CREATION_ORDER: Record<string, number> = {
   table: 2,
   tableType: 2,
   ddl: 3,
+  scalarFunction: 3,
   behaviorDefinition: 4,
   behaviorImplementation: 5,
   class: 5,

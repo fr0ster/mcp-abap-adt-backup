@@ -46,6 +46,11 @@ const RESTORE_PHASES: RestorePhase[] = [
     types: ['behaviorDefinition', 'behaviorImplementation'],
     activation: 'bulk',
   },
+  {
+    name: 'Scalar Functions',
+    types: ['scalarFunction'],
+    activation: 'cluster',
+  },
   { name: 'Classes', types: ['class'], activation: 'individual' },
   { name: 'Interfaces', types: ['interface'], activation: 'individual' },
   { name: 'Programs', types: ['program'], activation: 'individual' },

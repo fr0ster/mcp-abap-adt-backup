@@ -29,6 +29,9 @@ export function applyConfigName(
     case 'ddl':
       finalConfig.ddlName = name;
       break;
+    case 'scalarFunction':
+      finalConfig.scalarFunctionName = name;
+      break;
     case 'class':
       finalConfig.className = name;
       break;

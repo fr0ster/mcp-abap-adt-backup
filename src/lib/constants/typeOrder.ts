@@ -8,6 +8,7 @@ export const typeOrder: SupportedType[] = [
   'table',
   'tableType',
   'ddl',
+  'scalarFunction',
   'functionGroup',
   'functionInclude',
   'functionModule',

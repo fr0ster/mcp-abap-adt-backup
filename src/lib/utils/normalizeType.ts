@@ -15,6 +15,8 @@ export function normalizeType(rawType: string): SupportedType {
     ddl: 'ddl',
     view: 'ddl',
     cds: 'ddl',
+    scalarfunction: 'scalarFunction',
+    scalar_function: 'scalarFunction',
     class: 'class',
     interface: 'interface',
     program: 'program',

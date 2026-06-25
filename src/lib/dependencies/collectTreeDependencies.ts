@@ -14,6 +14,7 @@ const WHERE_USED_TYPE_MAP: Partial<Record<SupportedType, string>> = {
   structure: 'STRU/DT',
   table: 'TABL/DT',
   ddl: 'DDLS/DF',
+  scalarFunction: 'DSFD/SCF',
   class: 'CLAS/OC',
   interface: 'INTF/IF',
   program: 'PROG/P',

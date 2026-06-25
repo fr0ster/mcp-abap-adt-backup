@@ -10,6 +10,7 @@ const supportedTypes: SupportedType[] = [
   'table',
   'tableType',
   'ddl',
+  'scalarFunction',
   'class',
   'interface',
   'program',

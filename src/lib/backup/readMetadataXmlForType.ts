@@ -134,6 +134,13 @@ export async function readMetadataXmlForType(
         result = responseToText(state.metadataResult);
         break;
       }
+      case 'scalarFunction': {
+        const state = await client
+          .getScalarFunction()
+          .readMetadata({ scalarFunctionName: name });
+        result = responseToText(state.metadataResult);
+        break;
+      }
       default:
         return undefined;
     }

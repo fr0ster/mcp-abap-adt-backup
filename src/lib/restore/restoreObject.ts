@@ -14,6 +14,7 @@ import type {
   IMetadataExtensionConfig,
   IPackageConfig,
   IProgramConfig,
+  IScalarFunctionConfig,
   IServiceBindingConfig,
   IServiceDefinitionConfig,
   IStructureConfig,
@@ -361,6 +362,23 @@ export async function restoreObject(
         await client
           .getTableType()
           .update(asConfig<ITableTypeConfig>(config), options);
+      }
+      return;
+    }
+    case 'scalarFunction': {
+      if (mode !== 'update') {
+        await client
+          .getScalarFunction()
+          .create(asConfig<IScalarFunctionConfig>(config), options);
+      }
+      if (obj.source) {
+        await client.getScalarFunction().update(
+          asConfig<IScalarFunctionConfig>({
+            ...config,
+            sourceCode: obj.source,
+          }),
+          options,
+        );
       }
       return;
     }

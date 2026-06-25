@@ -6,6 +6,7 @@ export type SupportedType =
   | 'table'
   | 'tableType'
   | 'ddl'
+  | 'scalarFunction'
   | 'class'
   | 'interface'
   | 'program'

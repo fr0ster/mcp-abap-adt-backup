@@ -120,6 +120,12 @@ export async function readSourceText(
           .read({ accessControlName: spec.name }, version);
         return responseToText(state?.readResult);
       }
+      case 'scalarFunction': {
+        const state = await client
+          .getScalarFunction()
+          .read({ scalarFunctionName: spec.name }, version);
+        return responseToText(state?.readResult);
+      }
       default:
         return undefined;
     }

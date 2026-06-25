@@ -9,6 +9,7 @@ export function isRestoreImplemented(type?: SupportedType): boolean {
     case 'table':
     case 'tableType':
     case 'ddl':
+    case 'scalarFunction':
     case 'functionGroup':
     case 'functionModule':
     case 'functionInclude':
