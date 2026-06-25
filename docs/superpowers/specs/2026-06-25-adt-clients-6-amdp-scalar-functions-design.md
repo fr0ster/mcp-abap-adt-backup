@@ -85,12 +85,35 @@ add (both directions each):
 
 - **AMDP class ↔ table function (DDLS):** the DDLS source contains
   `IMPLEMENTED BY METHOD <class>=><method>`, giving the DDLS→class direction via the
-  source name-scan; add the explicit reverse edge class→DDLS so they share one SCC.
-- **scalar function definition (DSFD) ↔ implementation (DSFI):** add both edges using the
-  implementation's `config.scalarFunctionName` (the definition name is not reliably in
-  the implementation source). Mirrors the BIML→BDEF config rule, plus the reverse.
-- **AMDP class ↔ DSFI (amdpEngine):** add both directions (class name from source scan or
-  a config fallback) so an amdp-engine implementation joins the class's SCC.
+  source name-scan; the **reverse** class→DDLS edge must be added from the DDLS node's
+  iteration (the class source does not name the DDLS).
+- **scalar function definition (DSFD) ↔ implementation (DSFI):** add both edges from the
+  implementation's iteration using `config.scalarFunctionName` (the definition name is
+  not reliably in either source): forward DSFI→DSFD and reverse DSFD→DSFI.
+- **AMDP class ↔ DSFI (amdpEngine):** the `amdpEngine` implementation source names the
+  AMDP class/method, so the source name-scan yields DSFI→class; add the reverse
+  class→DSFI from the DSFI node's iteration. (`sqlEngine` implementations have no AMDP
+  class, so no edge.) **Live-verify** that the class name actually appears in the DSFI
+  source; there is no AMDP-class field in `IScalarFunctionImplementationConfig`, so no
+  config-based fallback is assumed.
+
+### Reciprocal-edge mechanism (required)
+
+`buildAdjacency` currently builds only the *current* node's forward deps and overwrites
+with `adj.set(id, deps)` at the end of each iteration
+(`src/lib/restore/analyzeDependencies.ts:98`). The BDEF↔BIML pattern works **only because
+each side's source names the other** (two independent forward edges). The new edges above
+are one-sided: only the DDLS/DSFI source names its target, so the reverse edge must be
+written into the **target** node's adjacency set — which the per-node overwrite would
+clobber. The implementation must therefore:
+
+- collect reverse edges discovered during the pass into a separate list
+  `reverseEdges: Array<[fromId, toId]>`, and
+- after the main loop, apply them by **union** into the existing adjacency sets
+  (`adj.get(fromId)` ∪ `{toId}`, lazily creating the set), so nothing is overwritten.
+
+A second full pass is an acceptable alternative; the requirement is that reciprocal edges
+survive the per-node `adj.set`.
 
 Net effect: AMDP class + table-function DDLS + scalar definition + its implementation(s)
 collapse into one SCC → one `RestoreGroup` → one `bulkActivate`. `TYPE_CREATION_ORDER`
@@ -176,7 +199,10 @@ interface IAppendStructureConfig { appendStructureName: string; baseObject?: str
 - `src/lib/tree/readPayloadForType.ts` — payload selection for new types.
 - `src/lib/tree/isRestoreImplemented.ts` — mark new types implemented.
 - `src/lib/dependencies/collectTreeDependencies.ts` — `WHERE_USED_TYPE_MAP` entries.
-- `src/lib/restore/analyzeDependencies.ts` — `TYPE_CREATION_ORDER` weights.
+- `src/lib/restore/analyzeDependencies.ts` — `TYPE_CREATION_ORDER` weights for the new
+  types; add the bidirectional structural edges in `buildAdjacency` (DDLS↔class,
+  DSFD↔DSFI, class↔DSFI-amdp) **plus** the reciprocal-edge mechanism (reverse-edge list
+  unioned after the main loop) described in the Dependency grouping section.
 - `src/lib/restore/restoreTreeBackup.ts` — **fallback path only**: rename the `CDS Views`
   phase → `DDL` and register the new types (`scalarFunction`,
   `scalarFunctionImplementation`, `appendStructure`) in `RESTORE_PHASES` so the no-plan
