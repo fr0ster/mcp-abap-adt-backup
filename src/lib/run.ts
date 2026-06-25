@@ -41,6 +41,7 @@ import type {
   RestoreMode,
   RestorePlan,
   RestorePlanGroup,
+  SupportedType,
 } from './types';
 import { diffUnified } from './utils/diffUnified';
 import { formatObjectSpec } from './utils/formatObjectSpec';
@@ -198,7 +199,9 @@ export async function run(): Promise<void> {
       .getUtils()
       .getPackageHierarchy(packageName.toUpperCase());
     const rootTree: BackupTreeNode = {
-      ...(hierarchy as unknown as BackupTreeNode),
+      ...hierarchy,
+      type: hierarchy.type as SupportedType | undefined,
+      children: hierarchy.children as BackupTreeNode[] | undefined,
       restoreStatus: 'ok',
     };
     const enrichedRoot = await enrichTreeNode(rootTree, client, false);

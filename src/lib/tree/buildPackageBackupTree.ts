@@ -1,7 +1,7 @@
 import type { AdtClient } from '@mcp-abap-adt/adt-clients';
 import { logVerbose } from '../cli/logVerbose';
 import { collectTreeDependencies } from '../dependencies/collectTreeDependencies';
-import type { BackupTreeFile, BackupTreeNode } from '../types';
+import type { BackupTreeFile, BackupTreeNode, SupportedType } from '../types';
 import { enrichTreeNode } from './enrichTreeNode';
 import { flattenTree } from './flattenTree';
 
@@ -16,7 +16,9 @@ export async function buildPackageBackupTree(
     .getPackageHierarchy(packageNameUpper);
 
   const rootTree: BackupTreeNode = {
-    ...(hierarchy as unknown as BackupTreeNode),
+    ...hierarchy,
+    type: hierarchy.type as SupportedType | undefined,
+    children: hierarchy.children as BackupTreeNode[] | undefined,
     restoreStatus: 'not-implemented',
   };
 
