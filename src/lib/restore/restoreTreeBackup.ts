@@ -37,6 +37,11 @@ const RESTORE_PHASES: RestorePhase[] = [
   { name: 'Tables', types: ['table'], activation: 'individual' },
   { name: 'Table Types', types: ['tableType'], activation: 'individual' },
   {
+    name: 'Scalar Functions',
+    types: ['scalarFunction'],
+    activation: 'cluster',
+  },
+  {
     name: 'DDL (CDS Views & Table Functions)',
     types: ['ddl'],
     activation: 'cluster',
@@ -45,11 +50,6 @@ const RESTORE_PHASES: RestorePhase[] = [
     name: 'Behavior',
     types: ['behaviorDefinition', 'behaviorImplementation'],
     activation: 'bulk',
-  },
-  {
-    name: 'Scalar Functions',
-    types: ['scalarFunction'],
-    activation: 'cluster',
   },
   { name: 'Classes', types: ['class'], activation: 'individual' },
   { name: 'Interfaces', types: ['interface'], activation: 'individual' },
