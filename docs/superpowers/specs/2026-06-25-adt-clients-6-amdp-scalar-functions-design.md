@@ -70,21 +70,31 @@ sources only:
 2. explicit structural edges derived from `config` (the existing BDEF↔BIML / service
    binding cases at lines 53–95).
 
-Therefore adding `WHERE_USED_TYPE_MAP` entries alone does **not** change grouping. To put
-the new objects in the same SCC as their AMDP class / table function, grouping must be
-driven through `buildAdjacency`:
+**A one-directional edge is not enough for co-activation.** `analyzeDependencyLevels`
+(`src/lib/restore/analyzeDependencies.ts:276`) groups by DAG **level**: it computes each
+SCC's level = `max(dependency level) + 1` and merges all SCCs *at the same level* into one
+`RestoreGroup`. A one-directional edge A→B places B at a lower level than A, so they land
+in **different** groups (correct ordering, but not co-activation). Objects co-activate in
+one group only when they are in the **same SCC**.
 
-- **table function (DDLS) → AMDP class:** the DDLS source contains
-  `IMPLEMENTED BY METHOD <class>=>=<method>`, so the existing name-scan (source rule 1)
-  already produces this edge once the class is a backup node. No new rule required, but
-  add an explicit structural edge as a safety net.
-- **scalar function implementation (DSFI) → scalar function definition (DSFD):** the
-  definition name does not reliably appear in the implementation *source*, so add an
-  **explicit structural edge** in `buildAdjacency` from `scalarFunctionImplementation`
-  to `scalarFunction` using `config.scalarFunctionName` (mirrors the existing
-  `behaviorImplementation → behaviorDefinition` rule at lines 78–85).
-- **DSFI (amdpEngine) → AMDP class:** caught by the source name-scan; add a config-based
-  fallback if the class name is not present in the implementation source.
+Therefore, to satisfy the goal, the new objects must form a **single SCC** via
+**bidirectional structural edges** in `buildAdjacency` — exactly the pattern already used
+for `behaviorDefinition ↔ behaviorImplementation` (the code comment at line 53 states
+"bidirectional = same SCC", with edges added in both directions at lines 54–75). Edges to
+add (both directions each):
+
+- **AMDP class ↔ table function (DDLS):** the DDLS source contains
+  `IMPLEMENTED BY METHOD <class>=><method>`, giving the DDLS→class direction via the
+  source name-scan; add the explicit reverse edge class→DDLS so they share one SCC.
+- **scalar function definition (DSFD) ↔ implementation (DSFI):** add both edges using the
+  implementation's `config.scalarFunctionName` (the definition name is not reliably in
+  the implementation source). Mirrors the BIML→BDEF config rule, plus the reverse.
+- **AMDP class ↔ DSFI (amdpEngine):** add both directions (class name from source scan or
+  a config fallback) so an amdp-engine implementation joins the class's SCC.
+
+Net effect: AMDP class + table-function DDLS + scalar definition + its implementation(s)
+collapse into one SCC → one `RestoreGroup` → one `bulkActivate`. `TYPE_CREATION_ORDER`
+still governs the create order *within* that single group.
 
 `WHERE_USED_TYPE_MAP` / `mapAdtTypeToSupported` entries for `DSFD/SCF`, `DSFI/SFI`,
 `TABL/DS` are still added so `usedBy` stays complete for `diff`/display, but they are
@@ -93,12 +103,14 @@ driven through `buildAdjacency`:
 ### Where the co-activation guarantee holds (scoped after review)
 
 - **Plan-driven restore (`restore --plan`, the canonical workflow):** `plan` calls
-  `analyzeDependencyLevels` over **all** non-package nodes mixed together, so a single
-  plan group already contains mixed types; `restoreTreeBackup` creates every object in
-  the group inactive and then `bulkActivate`s the whole group together
-  (`src/lib/restore/restoreTreeBackup.ts:330`). The AMDP/scalar/table-function objects
-  co-activate here **provided the `buildAdjacency` edges above place them in one group.**
-  This is the guarantee the goal refers to.
+  `analyzeDependencyLevels` over all non-package nodes. Mixed-type analysis alone does
+  **not** produce a mixed group — co-activation happens only because the bidirectional
+  edges above force the AMDP class + table function + scalar def + impl into **one SCC**,
+  which `analyzeDependencyLevels` emits as a single `RestoreGroup`. `restoreTreeBackup`
+  then creates every object in that group inactive and `bulkActivate`s the whole group
+  together (`src/lib/restore/restoreTreeBackup.ts:330`). This co-activation is therefore
+  contingent on the SCC edges, and the smoke test must assert the single group in the
+  generated `plan.yaml`.
 - **Fallback phase restore (no plan):** `RESTORE_PHASES` processes types in separate
   phases with per-phase activation, so cross-type co-activation does **not** happen
   there. We intentionally do **not** reshape `RESTORE_PHASES` (YAGNI); the spec documents
@@ -165,8 +177,12 @@ interface IAppendStructureConfig { appendStructureName: string; baseObject?: str
 - `src/lib/tree/isRestoreImplemented.ts` — mark new types implemented.
 - `src/lib/dependencies/collectTreeDependencies.ts` — `WHERE_USED_TYPE_MAP` entries.
 - `src/lib/restore/analyzeDependencies.ts` — `TYPE_CREATION_ORDER` weights.
-- `src/lib/restore/restoreTreeBackup.ts` — rename `CDS Views` phase → `DDL`; add scalar
-  function handling within cluster activation.
+- `src/lib/restore/restoreTreeBackup.ts` — **fallback path only**: rename the `CDS Views`
+  phase → `DDL` and register the new types (`scalarFunction`,
+  `scalarFunctionImplementation`, `appendStructure`) in `RESTORE_PHASES` so the no-plan
+  restore handles them at all. This is registration/ordering only — it does **not** add
+  cross-type cluster activation to the fallback path (that remains plan-driven, per the
+  decision above). The plan-driven path needs no change here; it follows `plan.groups`.
 - `src/lib/constants/typeOrder.ts` — `view` → `ddl`; add new types.
 - `src/lib/verify/findOtherType.ts` — `view` → `ddl`; add new types.
 - `package.json` — `@mcp-abap-adt/adt-clients` `^6.0.0`.
@@ -178,10 +194,10 @@ interface IAppendStructureConfig { appendStructureName: string; baseObject?: str
   structures also report `TABL/DS`. The implementation must disambiguate — likely by a
   more specific ADT subtype or by source-content inspection — without regressing existing
   structure handling. Resolve during implementation/verification against the live system.
-- **Scalar function def/impl pairing** depends on the explicit `buildAdjacency` edge
-  (`config.scalarFunctionName`) — verify on a live system that the implementation's
-  metadata XML actually exposes the definition name; if it does not, the def/impl pair
-  will not co-group and the spec's grouping approach needs revisiting.
+- **Scalar function def/impl pairing** depends on the bidirectional `buildAdjacency`
+  edges keyed on `config.scalarFunctionName` — verify on a live system that the
+  implementation's metadata XML actually exposes the definition name; if it does not, the
+  def/impl pair will not share an SCC and the spec's grouping approach needs revisiting.
 - **Grouping edges are unverified against a live system.** Confirm that the table
   function DDLS source contains the AMDP class name (for the source name-scan) and that
   the DSFI metadata exposes `scalarFunctionName`/`engineValue`. If an edge is missing,
