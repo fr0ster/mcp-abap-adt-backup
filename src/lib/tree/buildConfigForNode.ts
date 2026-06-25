@@ -8,6 +8,7 @@ import { parseDataElementConfig } from '../xml/parseDataElementConfig';
 import { parseDomainConfig } from '../xml/parseDomainConfig';
 import { parseEnhancementConfig } from '../xml/parseEnhancementConfig';
 import { parsePackageConfig } from '../xml/parsePackageConfig';
+import { parseScalarFunctionImplementationConfig } from '../xml/parseScalarFunctionImplementationConfig';
 import { parseServiceBindingConfig } from '../xml/parseServiceBindingConfig';
 import { parseTableTypeConfig } from '../xml/parseTableTypeConfig';
 
@@ -164,6 +165,22 @@ export async function buildConfigForNode(
         functionGroupName,
         toBackupConfig(config),
       );
+    }
+    case 'scalarFunctionImplementation': {
+      const base = applyConfigName(type, name, functionGroupName, {
+        implementationName: name,
+      } as BackupConfig);
+      if (!metadataXml) {
+        return { ...base, engineValue: 'sqlEngine' } as BackupConfig;
+      }
+      const parsed = parseScalarFunctionImplementationConfig(metadataXml);
+      return {
+        ...base,
+        scalarFunctionName: parsed.scalarFunctionName,
+        engineValue: parsed.engineValue ?? 'sqlEngine',
+        description: parsed.description,
+        packageName: parsed.packageName,
+      } as BackupConfig;
     }
     default: {
       if (!metadataXml) {

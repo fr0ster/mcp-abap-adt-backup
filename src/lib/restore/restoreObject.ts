@@ -15,6 +15,7 @@ import type {
   IPackageConfig,
   IProgramConfig,
   IScalarFunctionConfig,
+  IScalarFunctionImplementationConfig,
   IServiceBindingConfig,
   IServiceDefinitionConfig,
   IStructureConfig,
@@ -374,6 +375,26 @@ export async function restoreObject(
       if (obj.source) {
         await client.getScalarFunction().update(
           asConfig<IScalarFunctionConfig>({
+            ...config,
+            sourceCode: obj.source,
+          }),
+          options,
+        );
+      }
+      return;
+    }
+    case 'scalarFunctionImplementation': {
+      if (mode !== 'update') {
+        await client
+          .getScalarFunctionImplementation()
+          .create(
+            asConfig<IScalarFunctionImplementationConfig>(config),
+            options,
+          );
+      }
+      if (obj.source) {
+        await client.getScalarFunctionImplementation().update(
+          asConfig<IScalarFunctionImplementationConfig>({
             ...config,
             sourceCode: obj.source,
           }),

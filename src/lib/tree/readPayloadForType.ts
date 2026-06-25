@@ -26,6 +26,7 @@ export async function readPayloadForType(
     case 'enhancement':
     case 'accessControl':
     case 'scalarFunction':
+    case 'scalarFunctionImplementation':
     case 'tableType': {
       const payload = await readSourceText(client, {
         type,

@@ -126,6 +126,12 @@ export async function readSourceText(
           .read({ scalarFunctionName: spec.name }, version);
         return responseToText(state?.readResult);
       }
+      case 'scalarFunctionImplementation': {
+        const state = await client
+          .getScalarFunctionImplementation()
+          .read({ implementationName: spec.name }, version);
+        return responseToText(state?.readResult);
+      }
       default:
         return undefined;
     }

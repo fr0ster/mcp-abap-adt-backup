@@ -21,6 +21,7 @@ export function mapAdtTypeToSupported(
     'TTYP/TT': 'tableType',
     'DDLS/DF': 'ddl',
     'DSFD/SCF': 'scalarFunction',
+    'DSFI/SFI': 'scalarFunctionImplementation',
     'DDLX/EX': 'metadataExtension',
     'CLAS/OC': 'class',
     'INTF/IF': 'interface',
@@ -53,6 +54,7 @@ export function mapAdtTypeToSupported(
   if (normalized.startsWith('XSLT/')) return 'transformation';
   if (normalized.startsWith('DDLS/')) return 'ddl';
   if (normalized.startsWith('DSFD/')) return 'scalarFunction';
+  if (normalized.startsWith('DSFI/')) return 'scalarFunctionImplementation';
   if (normalized.startsWith('DDLX/')) return 'metadataExtension';
   if (normalized.startsWith('SRVD/')) return 'serviceDefinition';
   if (normalized.startsWith('SRVB/')) return 'serviceBinding';

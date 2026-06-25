@@ -32,6 +32,9 @@ export function applyConfigName(
     case 'scalarFunction':
       finalConfig.scalarFunctionName = name;
       break;
+    case 'scalarFunctionImplementation':
+      finalConfig.implementationName = name;
+      break;
     case 'class':
       finalConfig.className = name;
       break;

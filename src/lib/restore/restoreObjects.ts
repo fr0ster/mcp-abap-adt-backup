@@ -14,6 +14,7 @@ const ADT_TYPE_MAP: Partial<Record<string, string>> = {
   tableType: 'TTYP/DT',
   ddl: 'DDLS/DF',
   scalarFunction: 'DSFD/SCF',
+  scalarFunctionImplementation: 'DSFI/SFI',
   class: 'CLAS/OC',
   interface: 'INTF/OI',
   program: 'PROG/P',

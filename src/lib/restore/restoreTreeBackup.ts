@@ -38,7 +38,7 @@ const RESTORE_PHASES: RestorePhase[] = [
   { name: 'Table Types', types: ['tableType'], activation: 'individual' },
   {
     name: 'Scalar Functions',
-    types: ['scalarFunction'],
+    types: ['scalarFunction', 'scalarFunctionImplementation'],
     activation: 'cluster',
   },
   {

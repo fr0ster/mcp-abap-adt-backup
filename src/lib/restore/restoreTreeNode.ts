@@ -16,6 +16,7 @@ import type {
   IPackageConfig,
   IProgramConfig,
   IScalarFunctionConfig,
+  IScalarFunctionImplementationConfig,
   IServiceBindingConfig,
   IServiceDefinitionConfig,
   IStructureConfig,
@@ -491,6 +492,26 @@ export async function restoreTreeNode(
         if (payload) {
           await client.getScalarFunction().update(
             asConfig<IScalarFunctionConfig>({
+              ...config,
+              sourceCode: payload,
+            }),
+            options,
+          );
+        }
+        return;
+      }
+      case 'scalarFunctionImplementation': {
+        if (mode !== 'update') {
+          await client
+            .getScalarFunctionImplementation()
+            .create(
+              asConfig<IScalarFunctionImplementationConfig>(config),
+              options,
+            );
+        }
+        if (payload) {
+          await client.getScalarFunctionImplementation().update(
+            asConfig<IScalarFunctionImplementationConfig>({
               ...config,
               sourceCode: payload,
             }),

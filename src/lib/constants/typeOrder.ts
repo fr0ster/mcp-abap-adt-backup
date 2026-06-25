@@ -14,6 +14,7 @@ export const typeOrder: SupportedType[] = [
   'functionModule',
   'interface',
   'class',
+  'scalarFunctionImplementation',
   'program',
   'transformation',
   'serviceDefinition',

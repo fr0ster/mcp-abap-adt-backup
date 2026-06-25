@@ -10,6 +10,7 @@ export function isRestoreImplemented(type?: SupportedType): boolean {
     case 'tableType':
     case 'ddl':
     case 'scalarFunction':
+    case 'scalarFunctionImplementation':
     case 'functionGroup':
     case 'functionModule':
     case 'functionInclude':

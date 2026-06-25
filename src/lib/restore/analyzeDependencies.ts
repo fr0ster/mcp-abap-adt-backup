@@ -261,6 +261,7 @@ const TYPE_CREATION_ORDER: Record<string, number> = {
   behaviorDefinition: 4,
   behaviorImplementation: 5,
   class: 5,
+  scalarFunctionImplementation: 6,
   interface: 5,
   accessControl: 6,
   metadataExtension: 6,
