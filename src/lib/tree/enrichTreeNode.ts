@@ -18,22 +18,11 @@ export async function enrichTreeNode(
   includeCode: boolean,
   parentFunctionGroupName?: string,
 ): Promise<BackupTreeNode> {
-  // NOTE for Task 6: confirm the exact field on PackageHierarchyNode that carries the
-  // append-structure marker. The heuristic below checks a hypothetical `appendStructure`
-  // boolean flag and an `objectType` text containing "append". If NEITHER is present in the
-  // live hierarchy response, an append structure is silently backed up as a plain `structure`
-  // (losing baseObject). Task-6 live test MUST confirm appends classify as appendStructure
-  // (smoke checklist gating check). If the hierarchy lacks a flag, add a content-inspection
-  // fallback here: fetch the metadata XML and detect the DDIC EXTEND/append marker in it,
-  // then set isAppend accordingly before calling mapAdtTypeToSupported.
-  const rawNode = node as BackupTreeNode & {
-    appendStructure?: boolean;
-    objectType?: string;
-  };
-  const isAppend =
-    /append/i.test(rawNode.objectType ?? '') ||
-    rawNode.appendStructure === true;
-  const mappedType = mapAdtTypeToSupported(node.adtType, { isAppend });
+  // TABL/DS is reported for BOTH plain structures and append structures; ADT does not
+  // distinguish them by type string or hierarchy metadata — only the source content does.
+  // We default to 'structure' here and reclassify to 'appendStructure' after fetching
+  // the payload (see post-payload block below).
+  const mappedType = mapAdtTypeToSupported(node.adtType);
   const functionGroupName =
     mappedType === 'functionGroup'
       ? node.name
@@ -113,6 +102,26 @@ export async function enrichTreeNode(
           nextNode.config = {
             ...(nextNode.config || {}),
             behaviorDefinition,
+          };
+        }
+      }
+      // TABL/DS is used for BOTH plain structures and append structures; ADT does not
+      // distinguish them by type string or hierarchy metadata — only the source does.
+      // An append uses `extend type <BASE> with <NAME>`; a plain structure uses
+      // `define structure`. Reclassify here after the source has been fetched.
+      if (node.adtType === 'TABL/DS') {
+        const appendMatch = payload.payload.match(
+          /extend\s+type\s+([A-Za-z0-9_/]+)\s+with\b/i,
+        );
+        if (appendMatch) {
+          nextNode.type = 'appendStructure';
+          nextNode.restoreStatus = isRestoreImplemented('appendStructure')
+            ? 'ok'
+            : 'not-implemented';
+          nextNode.config = {
+            ...(nextNode.config || {}),
+            appendStructureName: node.name,
+            baseObject: appendMatch[1].toUpperCase(),
           };
         }
       }
