@@ -7,6 +7,7 @@ import { ensureDescription } from '../utils/ensureDescription';
 import { parseBdefSource } from '../utils/parseBdefSource';
 import { parseBehaviorDefinitionFromClass } from '../utils/parseBehaviorDefinitionFromClass';
 import { extractMetadata } from '../xml/extractMetadata';
+import { parseScalarFunctionImplementationConfig } from '../xml/parseScalarFunctionImplementationConfig';
 import { buildConfigForNode } from './buildConfigForNode';
 import { isRestoreImplemented } from './isRestoreImplemented';
 import { mapAdtTypeToSupported } from './mapAdtTypeToSupported';
@@ -104,6 +105,17 @@ export async function enrichTreeNode(
             behaviorDefinition,
           };
         }
+      }
+      // DSFI stores its descriptor as JSON in the source payload — not in metadata XML.
+      // Parse scalarFunctionName and engine here, after the payload has been fetched.
+      if (nextNode.type === 'scalarFunctionImplementation') {
+        const sfi = parseScalarFunctionImplementationConfig(payload.payload);
+        nextNode.config = {
+          ...(nextNode.config || {}),
+          implementationName: node.name,
+          scalarFunctionName: sfi.scalarFunctionName,
+          engineValue: sfi.engineValue ?? 'sqlEngine',
+        };
       }
       // TABL/DS is used for BOTH plain structures and append structures; ADT does not
       // distinguish them by type string or hierarchy metadata — only the source does.
