@@ -111,3 +111,25 @@ adt-backup diff \
 
 Expected:
 - output matches expected local/system differences
+
+## 8) AMDP / scalar functions / table functions / append structure
+
+Use a package that contains: a table-function CDS view (DDLS backed by an AMDP class), a scalar function definition (DSFD/SCF) + implementation (DSFI/SFI), and an append structure (TABL/DS).
+
+```bash
+adt-backup backup \
+  --package <AMDP_PACKAGE> \
+  --output /tmp/adt-backup-smoke/amdp_backup.yaml \
+  --destination <DESTINATION> -vv
+```
+
+```bash
+adt-backup plan \
+  --input /tmp/adt-backup-smoke/amdp_backup.yaml \
+  --output /tmp/adt-backup-smoke/amdp_plan.yaml
+```
+
+Expected:
+- The generated `amdp_plan.yaml` contains a single group where the AMDP class (`class`), the table-function DDL (`ddl`), the scalar function definition (`scalarFunction`), and the scalar function implementation (`scalarFunctionImplementation`) all appear together with `isCircular: true`
+- The backup file captures `scalarFunctionImplementation` config fields `scalarFunctionName` and `engineValue`
+- The backup file captures `appendStructure` config field `baseObject`
