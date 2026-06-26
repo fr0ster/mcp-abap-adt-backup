@@ -12,6 +12,7 @@ const WHERE_USED_TYPE_MAP: Partial<Record<SupportedType, string>> = {
   domain: 'DOMA/DD',
   dataElement: 'DTEL/DE',
   structure: 'STRU/DT',
+  appendStructure: 'TABL/DS',
   table: 'TABL/DT',
   ddl: 'DDLS/DF',
   scalarFunction: 'DSFD/SCF',

@@ -1,6 +1,7 @@
 import type {
   AdtClient,
   IAccessControlConfig,
+  IAppendStructureConfig,
   IBehaviorDefinitionConfig,
   IBehaviorImplementationConfig,
   IClassConfig,
@@ -512,6 +513,28 @@ export async function restoreTreeNode(
         if (payload) {
           await client.getScalarFunctionImplementation().update(
             asConfig<IScalarFunctionImplementationConfig>({
+              ...config,
+              sourceCode: payload,
+            }),
+            options,
+          );
+        }
+        return;
+      }
+      case 'appendStructure': {
+        if (mode !== 'update') {
+          if (!config.baseObject) {
+            throw new Error(
+              `appendStructure ${node.name}: missing baseObject (cannot create)`,
+            );
+          }
+          await client
+            .getAppendStructure()
+            .create(asConfig<IAppendStructureConfig>(config), options);
+        }
+        if (payload) {
+          await client.getAppendStructure().update(
+            asConfig<IAppendStructureConfig>({
               ...config,
               sourceCode: payload,
             }),

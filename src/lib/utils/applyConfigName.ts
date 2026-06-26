@@ -79,6 +79,9 @@ export function applyConfigName(
     case 'accessControl':
       finalConfig.accessControlName = name;
       break;
+    case 'appendStructure':
+      finalConfig.appendStructureName = name;
+      break;
     case 'unitTest':
       finalConfig.className = name;
       break;

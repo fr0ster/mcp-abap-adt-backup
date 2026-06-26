@@ -2,6 +2,7 @@ import type { SupportedType } from '../types';
 
 export function mapAdtTypeToSupported(
   adtType?: string,
+  hints?: { isAppend?: boolean },
 ): SupportedType | undefined {
   if (!adtType) {
     return undefined;
@@ -9,11 +10,13 @@ export function mapAdtTypeToSupported(
   const normalized = adtType.toUpperCase();
 
   // Exact matches
+  // Note: 'TABL/DS' maps to 'structure' by default; when hints.isAppend is set,
+  // the prefix rule below takes precedence (see guard on map lookup).
   const map: Record<string, SupportedType> = {
     'DEVC/K': 'package',
     'DOMA/DD': 'domain',
     'DTEL/DE': 'dataElement',
-    'TABL/DS': 'structure', // Note: ADT might return TABL/DS for structures sometimes
+    'TABL/DS': 'structure', // default; overridden by hint below
     'STRU/DT': 'structure',
     'STRU/DS': 'structure',
     'TABL/DT': 'table',
@@ -43,7 +46,9 @@ export function mapAdtTypeToSupported(
     'DCLS/DL': 'accessControl',
   };
 
-  if (map[normalized]) {
+  // Skip the exact-map entry for TABL/DS when the append hint is set,
+  // so the prefix rule below can return 'appendStructure'.
+  if (map[normalized] && !(normalized === 'TABL/DS' && hints?.isAppend)) {
     return map[normalized];
   }
 
@@ -61,7 +66,7 @@ export function mapAdtTypeToSupported(
   if (normalized.startsWith('DOMA/')) return 'domain';
   if (normalized.startsWith('DTEL/')) return 'dataElement';
   if (normalized.startsWith('TABL/DS') || normalized.startsWith('STRU/'))
-    return 'structure';
+    return hints?.isAppend ? 'appendStructure' : 'structure';
   if (normalized.startsWith('TABL/DT')) return 'table';
   if (normalized.startsWith('TTYP/')) return 'tableType';
   if (normalized.startsWith('FUGR/FF')) return 'functionModule';

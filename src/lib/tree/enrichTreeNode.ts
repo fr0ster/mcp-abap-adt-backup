@@ -18,7 +18,19 @@ export async function enrichTreeNode(
   includeCode: boolean,
   parentFunctionGroupName?: string,
 ): Promise<BackupTreeNode> {
-  const mappedType = mapAdtTypeToSupported(node.adtType);
+  // NOTE for Task 6: confirm the exact field on PackageHierarchyNode that carries
+  // the append-structure marker. The heuristic below checks a hypothetical `appendStructure`
+  // boolean flag and an `objectType` text containing "append". If neither is present in the
+  // live hierarchy response, fall back to content inspection of fetched metadata inside this
+  // function (look for EXTEND/append keyword in the XML).
+  const rawNode = node as BackupTreeNode & {
+    appendStructure?: boolean;
+    objectType?: string;
+  };
+  const isAppend =
+    /append/i.test(rawNode.objectType ?? '') ||
+    rawNode.appendStructure === true;
+  const mappedType = mapAdtTypeToSupported(node.adtType, { isAppend });
   const functionGroupName =
     mappedType === 'functionGroup'
       ? node.name

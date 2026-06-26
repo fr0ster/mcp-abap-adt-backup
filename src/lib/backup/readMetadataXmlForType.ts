@@ -148,6 +148,13 @@ export async function readMetadataXmlForType(
         result = responseToText(state.metadataResult);
         break;
       }
+      case 'appendStructure': {
+        const state = await client
+          .getAppendStructure()
+          .readMetadata({ appendStructureName: name });
+        result = responseToText(state.metadataResult);
+        break;
+      }
       default:
         return undefined;
     }

@@ -9,6 +9,8 @@ export function normalizeType(rawType: string): SupportedType {
     'data-element': 'dataElement',
     data_element: 'dataElement',
     structure: 'structure',
+    appendstructure: 'appendStructure',
+    append_structure: 'appendStructure',
     table: 'table',
     tabletype: 'tableType',
     table_type: 'tableType',

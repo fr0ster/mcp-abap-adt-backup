@@ -2,6 +2,7 @@ import type { BackupConfig, SupportedType } from '../types';
 import { applyConfigName } from '../utils/applyConfigName';
 import { toBackupConfig } from '../utils/toBackupConfig';
 import { extractMetadata } from '../xml/extractMetadata';
+import { parseAppendStructureConfig } from '../xml/parseAppendStructureConfig';
 import { parseBehaviorDefinitionConfig } from '../xml/parseBehaviorDefinitionConfig';
 import { parseClassConfig } from '../xml/parseClassConfig';
 import { parseDataElementConfig } from '../xml/parseDataElementConfig';
@@ -165,6 +166,21 @@ export async function buildConfigForNode(
         functionGroupName,
         toBackupConfig(config),
       );
+    }
+    case 'appendStructure': {
+      const base = applyConfigName(type, name, functionGroupName, {
+        appendStructureName: name,
+      } as BackupConfig);
+      if (!metadataXml) {
+        return base;
+      }
+      const parsed = parseAppendStructureConfig(metadataXml);
+      return {
+        ...base,
+        baseObject: parsed.baseObject,
+        description: parsed.description,
+        packageName: parsed.packageName,
+      } as BackupConfig;
     }
     case 'scalarFunctionImplementation': {
       const base = applyConfigName(type, name, functionGroupName, {

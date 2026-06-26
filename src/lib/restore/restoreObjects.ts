@@ -10,6 +10,7 @@ const ADT_TYPE_MAP: Partial<Record<string, string>> = {
   domain: 'DOMA/DT',
   dataElement: 'DTEL/DE',
   structure: 'TABL/DT',
+  appendStructure: 'TABL/DS',
   table: 'TABL/DT',
   tableType: 'TTYP/DT',
   ddl: 'DDLS/DF',

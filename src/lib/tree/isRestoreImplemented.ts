@@ -25,6 +25,7 @@ export function isRestoreImplemented(type?: SupportedType): boolean {
     case 'behaviorImplementation':
     case 'enhancement':
     case 'accessControl':
+    case 'appendStructure':
       return true;
     default:
       return false;

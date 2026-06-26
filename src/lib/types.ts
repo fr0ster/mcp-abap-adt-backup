@@ -22,6 +22,7 @@ export type SupportedType =
   | 'behaviorImplementation'
   | 'enhancement'
   | 'accessControl'
+  | 'appendStructure'
   | 'unitTest'
   | 'cdsUnitTest';
 

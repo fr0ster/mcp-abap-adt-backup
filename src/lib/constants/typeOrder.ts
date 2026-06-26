@@ -6,6 +6,7 @@ export const typeOrder: SupportedType[] = [
   'dataElement',
   'structure',
   'table',
+  'appendStructure',
   'tableType',
   'ddl',
   'scalarFunction',

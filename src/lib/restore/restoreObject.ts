@@ -1,5 +1,6 @@
 import type {
   AdtClient,
+  IAppendStructureConfig,
   IBehaviorDefinitionConfig,
   IBehaviorImplementationConfig,
   IClassConfig,
@@ -395,6 +396,28 @@ export async function restoreObject(
       if (obj.source) {
         await client.getScalarFunctionImplementation().update(
           asConfig<IScalarFunctionImplementationConfig>({
+            ...config,
+            sourceCode: obj.source,
+          }),
+          options,
+        );
+      }
+      return;
+    }
+    case 'appendStructure': {
+      if (mode !== 'update') {
+        if (!config.baseObject) {
+          throw new Error(
+            `appendStructure ${obj.name}: missing baseObject (cannot create)`,
+          );
+        }
+        await client
+          .getAppendStructure()
+          .create(asConfig<IAppendStructureConfig>(config), options);
+      }
+      if (obj.source) {
+        await client.getAppendStructure().update(
+          asConfig<IAppendStructureConfig>({
             ...config,
             sourceCode: obj.source,
           }),

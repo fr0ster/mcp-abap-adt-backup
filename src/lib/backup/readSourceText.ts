@@ -132,6 +132,12 @@ export async function readSourceText(
           .read({ implementationName: spec.name }, version);
         return responseToText(state?.readResult);
       }
+      case 'appendStructure': {
+        const state = await client
+          .getAppendStructure()
+          .read({ appendStructureName: spec.name }, version);
+        return responseToText(state?.readResult);
+      }
       default:
         return undefined;
     }

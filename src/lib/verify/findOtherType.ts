@@ -23,6 +23,7 @@ const supportedTypes: SupportedType[] = [
   'behaviorDefinition',
   'behaviorImplementation',
   'enhancement',
+  'appendStructure',
   'unitTest',
   'cdsUnitTest',
 ];

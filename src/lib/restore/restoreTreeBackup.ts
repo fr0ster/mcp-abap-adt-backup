@@ -35,6 +35,11 @@ const RESTORE_PHASES: RestorePhase[] = [
   { name: 'Data Elements', types: ['dataElement'], activation: 'individual' },
   { name: 'Structures', types: ['structure'], activation: 'individual' },
   { name: 'Tables', types: ['table'], activation: 'individual' },
+  {
+    name: 'Append Structures',
+    types: ['appendStructure'],
+    activation: 'individual',
+  },
   { name: 'Table Types', types: ['tableType'], activation: 'individual' },
   {
     name: 'Scalar Functions',
