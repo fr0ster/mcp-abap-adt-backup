@@ -130,6 +130,8 @@ adt-backup plan \
 ```
 
 Expected:
-- The generated `amdp_plan.yaml` contains a single group where the AMDP class (`class`), the table-function DDL (`ddl`), the scalar function definition (`scalarFunction`), and the scalar function implementation (`scalarFunctionImplementation`) all appear together with `isCircular: true`
+- Each circular pair co-activates atomically: `{ddl, class}` share one SCC and `{scalarFunction, scalarFunctionImplementation}` share another. Both pairs normally appear in one restore group (same DAG level); splitting into two adjacent groups is acceptable as long as each pair stays together with `isCircular: true` and cross-group ordering is correct.
 - The backup file captures `scalarFunctionImplementation` config fields `scalarFunctionName` and `engineValue`
 - The backup file captures `appendStructure` config field `baseObject`
+- **GATING CHECK — append-structure classification**: confirm that the append object appears in the backup as an `appendStructure` node (NOT `structure`) with a populated `baseObject` field. If it instead shows up as `structure`, the append-detection heuristic in `enrichTreeNode.ts` did not fire (no append marker in the hierarchy response); in that case, add a content-inspection fallback (detect the DDIC EXTEND/append marker in the fetched metadata XML) before the type is resolved.
+- **NOTE**: AMDP, scalar-function, and append-structure objects must be captured via `--package` backup, not `--objects`. The flat `--objects` path bypasses `buildConfigForNode`, so `scalarFunctionName`/`engineValue`/`baseObject` will not be recorded.

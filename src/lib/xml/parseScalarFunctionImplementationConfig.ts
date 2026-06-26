@@ -11,6 +11,9 @@ export function parseScalarFunctionImplementationConfig(xml: string): {
 } {
   const parsed = xmlParser.parse(xml) as NodeValue;
   const { description, packageName } = extractMetadata(xml);
+  // NOTE for the implementer: the exact attribute names below are unverified (no live system
+  // at plan time). After the live smoke test (Task 6), correct the probed attribute names if
+  // `scalarFunctionName` comes back empty. This is a documented open risk in the spec.
   // ADT exposes the owning definition and the engine as attributes; names vary
   // by release, so probe the known candidates.
   const scalarFunctionName =
@@ -25,6 +28,3 @@ export function parseScalarFunctionImplementationConfig(xml: string): {
       : 'sqlEngine';
   return { scalarFunctionName, engineValue, description, packageName };
 }
-// NOTE for the implementer: the exact attribute names are unverified (no live system at plan time).
-// After the live smoke test (Task 6), correct the probed attribute names if `scalarFunctionName`
-// comes back empty. This is a documented open risk in the spec.

@@ -65,8 +65,9 @@ export function mapAdtTypeToSupported(
   if (normalized.startsWith('SRVB/')) return 'serviceBinding';
   if (normalized.startsWith('DOMA/')) return 'domain';
   if (normalized.startsWith('DTEL/')) return 'dataElement';
-  if (normalized.startsWith('TABL/DS') || normalized.startsWith('STRU/'))
+  if (normalized.startsWith('TABL/DS'))
     return hints?.isAppend ? 'appendStructure' : 'structure';
+  if (normalized.startsWith('STRU/')) return 'structure';
   if (normalized.startsWith('TABL/DT')) return 'table';
   if (normalized.startsWith('TTYP/')) return 'tableType';
   if (normalized.startsWith('FUGR/FF')) return 'functionModule';

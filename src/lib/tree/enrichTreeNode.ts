@@ -18,11 +18,14 @@ export async function enrichTreeNode(
   includeCode: boolean,
   parentFunctionGroupName?: string,
 ): Promise<BackupTreeNode> {
-  // NOTE for Task 6: confirm the exact field on PackageHierarchyNode that carries
-  // the append-structure marker. The heuristic below checks a hypothetical `appendStructure`
-  // boolean flag and an `objectType` text containing "append". If neither is present in the
-  // live hierarchy response, fall back to content inspection of fetched metadata inside this
-  // function (look for EXTEND/append keyword in the XML).
+  // NOTE for Task 6: confirm the exact field on PackageHierarchyNode that carries the
+  // append-structure marker. The heuristic below checks a hypothetical `appendStructure`
+  // boolean flag and an `objectType` text containing "append". If NEITHER is present in the
+  // live hierarchy response, an append structure is silently backed up as a plain `structure`
+  // (losing baseObject). Task-6 live test MUST confirm appends classify as appendStructure
+  // (smoke checklist gating check). If the hierarchy lacks a flag, add a content-inspection
+  // fallback here: fetch the metadata XML and detect the DDIC EXTEND/append marker in it,
+  // then set isAppend accordingly before calling mapAdtTypeToSupported.
   const rawNode = node as BackupTreeNode & {
     appendStructure?: boolean;
     objectType?: string;

@@ -115,9 +115,15 @@ clobber. The implementation must therefore:
 A second full pass is an acceptable alternative; the requirement is that reciprocal edges
 survive the per-node `adj.set`.
 
-Net effect: AMDP class + table-function DDLS + scalar definition + its implementation(s)
-collapse into one SCC → one `RestoreGroup` → one `bulkActivate`. `TYPE_CREATION_ORDER`
-still governs the create order *within* that single group.
+Net effect: the bidirectional edges produce **two SCCs** — `{ddl, class}` and
+`{scalarFunction, scalarFunctionImplementation}` — rather than a single SCC spanning all
+four objects. These two SCCs land in **one `RestoreGroup`** only because
+`analyzeDependencyLevels` merges all SCCs that share the same DAG level. If one pair gains
+a dependency that shifts its level (e.g. the table-function DDL depends on a backed-up DDIC
+type that is itself at a higher level), the two SCCs may be emitted as separate groups.
+Restore correctness is still preserved: each circular pair is bulk-activated atomically, and
+cross-group ordering derived from the DAG is correct. `TYPE_CREATION_ORDER` governs the
+create order *within* each group.
 
 `WHERE_USED_TYPE_MAP` / `mapAdtTypeToSupported` entries for `DSFD/SCF`, `DSFI/SFI`,
 `TABL/DS` are still added so `usedBy` stays complete for `diff`/display, but they are
