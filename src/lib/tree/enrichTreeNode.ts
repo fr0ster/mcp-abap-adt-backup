@@ -111,6 +111,13 @@ export async function enrichTreeNode(
       // Parse scalarFunctionName and engine here, after the payload has been fetched.
       if (nextNode.type === 'scalarFunctionImplementation') {
         const sfi = parseScalarFunctionImplementationConfig(payload.payload);
+        if (!sfi.scalarFunctionName) {
+          logVerbose(
+            1,
+            `  [WARN] scalarFunctionImplementation:${node.name} — could not extract scalarFunctionName from source; excluded from restore`,
+          );
+          nextNode.restoreStatus = 'not-implemented';
+        }
         nextNode.config = {
           ...(nextNode.config || {}),
           implementationName: node.name,

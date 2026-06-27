@@ -242,6 +242,11 @@ export async function backupObject(
       const basic = await readBasicMetadata(client, spec);
       const source = await readSourceText(client, spec);
       const sfi = source ? parseScalarFunctionImplementationConfig(source) : {};
+      if (!sfi.scalarFunctionName) {
+        throw new Error(
+          `scalarFunctionImplementation ${spec.name}: could not extract scalarFunctionName from source (cannot produce a restorable backup)`,
+        );
+      }
       const config = applyConfigName(
         spec.type,
         spec.name,
@@ -266,6 +271,11 @@ export async function backupObject(
       const basic = await readBasicMetadata(client, spec);
       const source = await readSourceText(client, spec);
       const { baseObject } = source ? parseAppendStructureSource(source) : {};
+      if (!baseObject) {
+        throw new Error(
+          `appendStructure ${spec.name}: could not extract baseObject from source (cannot produce a restorable backup)`,
+        );
+      }
       const config = applyConfigName(
         spec.type,
         spec.name,
