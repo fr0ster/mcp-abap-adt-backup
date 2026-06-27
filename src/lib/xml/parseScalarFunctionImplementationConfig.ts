@@ -9,7 +9,11 @@ export function parseScalarFunctionImplementationConfig(source: string): {
         ? parsed.scalarFunctionName
         : undefined;
     const rawEngine =
-      typeof parsed.engine === 'string' ? parsed.engine : undefined;
+      typeof parsed.engineValue === 'string'
+        ? parsed.engineValue
+        : typeof parsed.engine === 'string'
+          ? parsed.engine
+          : undefined;
     const engineValue: 'sqlEngine' | 'amdpEngine' =
       rawEngine === 'amdpEngine' ? 'amdpEngine' : 'sqlEngine';
     return { scalarFunctionName, engineValue };

@@ -9,9 +9,11 @@ import { objectId } from '../utils/objectId';
 import { parseBehaviorDefinitionFromClass } from '../utils/parseBehaviorDefinitionFromClass';
 import { toBackupConfig } from '../utils/toBackupConfig';
 import { extractMetadata } from '../xml/extractMetadata';
+import { parseAppendStructureSource } from '../xml/parseAppendStructureSource';
 import { parseDataElementConfig } from '../xml/parseDataElementConfig';
 import { parseDomainConfig } from '../xml/parseDomainConfig';
 import { parsePackageConfig } from '../xml/parsePackageConfig';
+import { parseScalarFunctionImplementationConfig } from '../xml/parseScalarFunctionImplementationConfig';
 import { parseServiceBindingConfig } from '../xml/parseServiceBindingConfig';
 import { readBasicMetadata } from './readBasicMetadata';
 import { readMetadataXmlForType } from './readMetadataXmlForType';
@@ -232,6 +234,53 @@ export async function backupObject(
         type: spec.type,
         name: spec.name,
         functionGroupName: spec.functionGroupName,
+        config,
+        source: source ?? undefined,
+      };
+    }
+    case 'scalarFunctionImplementation': {
+      const basic = await readBasicMetadata(client, spec);
+      const source = await readSourceText(client, spec);
+      const sfi = source ? parseScalarFunctionImplementationConfig(source) : {};
+      const config = applyConfigName(
+        spec.type,
+        spec.name,
+        spec.functionGroupName,
+        {
+          packageName: basic.packageName,
+          description: basic.description,
+          implementationName: spec.name,
+          scalarFunctionName: sfi.scalarFunctionName,
+          engineValue: sfi.engineValue ?? 'sqlEngine',
+        } as BackupConfig,
+      );
+      return {
+        id,
+        type: spec.type,
+        name: spec.name,
+        config,
+        source: source ?? undefined,
+      };
+    }
+    case 'appendStructure': {
+      const basic = await readBasicMetadata(client, spec);
+      const source = await readSourceText(client, spec);
+      const { baseObject } = source ? parseAppendStructureSource(source) : {};
+      const config = applyConfigName(
+        spec.type,
+        spec.name,
+        spec.functionGroupName,
+        {
+          packageName: basic.packageName,
+          description: basic.description,
+          appendStructureName: spec.name,
+          ...(baseObject ? { baseObject } : {}),
+        } as BackupConfig,
+      );
+      return {
+        id,
+        type: spec.type,
+        name: spec.name,
         config,
         source: source ?? undefined,
       };

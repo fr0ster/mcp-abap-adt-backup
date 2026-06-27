@@ -7,6 +7,7 @@ import { ensureDescription } from '../utils/ensureDescription';
 import { parseBdefSource } from '../utils/parseBdefSource';
 import { parseBehaviorDefinitionFromClass } from '../utils/parseBehaviorDefinitionFromClass';
 import { extractMetadata } from '../xml/extractMetadata';
+import { parseAppendStructureSource } from '../xml/parseAppendStructureSource';
 import { parseScalarFunctionImplementationConfig } from '../xml/parseScalarFunctionImplementationConfig';
 import { buildConfigForNode } from './buildConfigForNode';
 import { isRestoreImplemented } from './isRestoreImplemented';
@@ -122,10 +123,8 @@ export async function enrichTreeNode(
       // An append uses `extend type <BASE> with <NAME>`; a plain structure uses
       // `define structure`. Reclassify here after the source has been fetched.
       if (node.adtType === 'TABL/DS') {
-        const appendMatch = payload.payload.match(
-          /extend\s+type\s+([A-Za-z0-9_/]+)\s+with\b/i,
-        );
-        if (appendMatch) {
+        const { baseObject } = parseAppendStructureSource(payload.payload);
+        if (baseObject) {
           nextNode.type = 'appendStructure';
           nextNode.restoreStatus = isRestoreImplemented('appendStructure')
             ? 'ok'
@@ -133,7 +132,7 @@ export async function enrichTreeNode(
           nextNode.config = {
             ...(nextNode.config || {}),
             appendStructureName: node.name,
-            baseObject: appendMatch[1].toUpperCase(),
+            baseObject,
           };
         }
       }
