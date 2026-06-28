@@ -113,6 +113,7 @@ The format is tracked per node in `codeFormat` and determines how backup/restore
 - Respond to the user in the language they use to communicate
 - Biome for linting/formatting (2-space indent, single quotes, semicolons)
 - TypeScript strict mode, target es2022, CommonJS output
+- Node.js >= 22 (`engines.node`); CI and release build on Node 22
 - `noExplicitAny`: warn in production, off in tests
 - Biome also handles import organization (`organizeImports: on`)
 
