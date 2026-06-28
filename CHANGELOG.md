@@ -8,7 +8,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
-## [1.6.0] - 2026-06-26
+## [1.6.0] - 2026-06-28
 
 ### Added
 - **New object type `scalarFunction`** (`DSFD/SCF`, payload source): backup and restore of CDS scalar function definitions.
