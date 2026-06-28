@@ -14,7 +14,7 @@ export async function readPayloadForType(
     case 'interface':
     case 'program':
     case 'transformation':
-    case 'view':
+    case 'ddl':
     case 'structure':
     case 'table':
     case 'functionModule':
@@ -25,6 +25,9 @@ export async function readPayloadForType(
     case 'behaviorImplementation':
     case 'enhancement':
     case 'accessControl':
+    case 'scalarFunction':
+    case 'scalarFunctionImplementation':
+    case 'appendStructure':
     case 'tableType': {
       const payload = await readSourceText(client, {
         type,

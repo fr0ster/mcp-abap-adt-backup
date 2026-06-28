@@ -8,7 +8,9 @@ export function isRestoreImplemented(type?: SupportedType): boolean {
     case 'structure':
     case 'table':
     case 'tableType':
-    case 'view':
+    case 'ddl':
+    case 'scalarFunction':
+    case 'scalarFunctionImplementation':
     case 'functionGroup':
     case 'functionModule':
     case 'functionInclude':
@@ -23,6 +25,7 @@ export function isRestoreImplemented(type?: SupportedType): boolean {
     case 'behaviorImplementation':
     case 'enhancement':
     case 'accessControl':
+    case 'appendStructure':
       return true;
     default:
       return false;

@@ -8,6 +8,18 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+## [1.6.0] - 2026-06-26
+
+### Added
+- **New object type `scalarFunction`** (`DSFD/SCF`, payload source): backup and restore of CDS scalar function definitions.
+- **New object type `scalarFunctionImplementation`** (`DSFI/SFI`, payload source): backup and restore of CDS scalar function implementations; config captures `scalarFunctionName` and `engineValue`.
+- **New object type `appendStructure`** (`TABL/DS`, payload source): backup and restore of ABAP append structures; config captures `baseObject`.
+- **AMDP co-activation group**: dependency analysis now emits a single `isCircular: true` group containing the AMDP class, its table-function DDL, and the associated scalar function definition + implementation, ensuring they are bulk-activated together during restore.
+
+### Changed
+- **`view` → `ddl`**: internal `SupportedType` value and ADT type mapping (`DDLS/…`) renamed from `view` to `ddl` to reflect that the type covers all CDS DDL sources (views, table functions, abstract entities), matching `adt-clients` 6.0.0.
+- `@mcp-abap-adt/adt-clients` `^5.x` → `^6.0.0` (renames internal type `view` → `ddl`).
+
 ## [1.5.0] - 2026-06-19
 
 ### Added

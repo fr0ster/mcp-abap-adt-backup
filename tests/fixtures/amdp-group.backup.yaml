@@ -1,0 +1,35 @@
+schemaVersion: 2
+package: ZTEST_AMDP
+root:
+  type: package
+  name: ZTEST_AMDP
+  restoreStatus: ok
+  children:
+    - type: class
+      name: ZCL_AMDP
+      restoreStatus: ok
+      codeFormat: source
+      # "CLASS zcl_amdp DEFINITION. METHOD get BY DATABASE FUNCTION. ENDCLASS."
+      codeBase64: Q0xBU1MgemNsX2FtZHAgREVGSU5JVElPTi4gTUVUSE9EIGdldCBCWSBEQVRBQkFTRSBGVU5DVElPTi4gRU5EQ0xBU1Mu
+    - type: ddl
+      name: ZTF_DEMO
+      restoreStatus: ok
+      codeFormat: source
+      # "define table function ZTF_DEMO returns { key abap.int4; } implemented by method ZCL_AMDP=>GET;"
+      codeBase64: ZGVmaW5lIHRhYmxlIGZ1bmN0aW9uIFpURl9ERU1PIHJldHVybnMgeyBrZXkgYWJhcC5pbnQ0OyB9IGltcGxlbWVudGVkIGJ5IG1ldGhvZCBaQ0xfQU1EUD0+R0VUOw==
+    - type: scalarFunction
+      name: ZSF_DEMO
+      restoreStatus: ok
+      codeFormat: source
+      # "define scalar function ZSF_DEMO"
+      codeBase64: ZGVmaW5lIHNjYWxhciBmdW5jdGlvbiBaU0ZfREVNTw==
+    - type: scalarFunctionImplementation
+      name: ZSFI_DEMO
+      restoreStatus: ok
+      codeFormat: source
+      config:
+        implementationName: ZSFI_DEMO
+        scalarFunctionName: ZSF_DEMO
+        engineValue: sqlEngine
+      # "implementation ZSFI_DEMO"
+      codeBase64: aW1wbGVtZW50YXRpb24gWlNGSV9ERU1P

@@ -1,10 +1,12 @@
 import type {
   AdtClient,
   IAccessControlConfig,
+  IAppendStructureConfig,
   IBehaviorDefinitionConfig,
   IBehaviorImplementationConfig,
   IClassConfig,
   IDataElementConfig,
+  IDdlConfig,
   IDomainConfig,
   IEnhancementConfig,
   IFunctionGroupConfig,
@@ -14,13 +16,14 @@ import type {
   IMetadataExtensionConfig,
   IPackageConfig,
   IProgramConfig,
+  IScalarFunctionConfig,
+  IScalarFunctionImplementationConfig,
   IServiceBindingConfig,
   IServiceDefinitionConfig,
   IStructureConfig,
   ITableConfig,
   ITableTypeConfig,
   ITransformationConfig,
-  IViewConfig,
 } from '@mcp-abap-adt/adt-clients';
 import { logVerbose } from '../cli/logVerbose';
 import { decodeBase64 } from '../crypto/decodeBase64';
@@ -197,15 +200,15 @@ export async function restoreTreeNode(
         }
         return;
       }
-      case 'view': {
+      case 'ddl': {
         if (mode !== 'update') {
-          await client.getView().create(asConfig<IViewConfig>(config), options);
+          await client.getDdl().create(asConfig<IDdlConfig>(config), options);
         }
         if (payload) {
           await client
-            .getView()
+            .getDdl()
             .update(
-              asConfig<IViewConfig>({ ...config, ddlSource: payload }),
+              asConfig<IDdlConfig>({ ...config, ddlSource: payload }),
               options,
             );
         }
@@ -479,6 +482,65 @@ export async function restoreTreeNode(
         await client
           .getTableType()
           .update(asConfig<ITableTypeConfig>(config), options);
+        return;
+      }
+      case 'scalarFunction': {
+        if (mode !== 'update') {
+          await client
+            .getScalarFunction()
+            .create(asConfig<IScalarFunctionConfig>(config), options);
+        }
+        if (payload) {
+          await client.getScalarFunction().update(
+            asConfig<IScalarFunctionConfig>({
+              ...config,
+              sourceCode: payload,
+            }),
+            options,
+          );
+        }
+        return;
+      }
+      case 'scalarFunctionImplementation': {
+        if (mode !== 'update') {
+          await client
+            .getScalarFunctionImplementation()
+            .create(
+              asConfig<IScalarFunctionImplementationConfig>(config),
+              options,
+            );
+        }
+        if (payload) {
+          await client.getScalarFunctionImplementation().update(
+            asConfig<IScalarFunctionImplementationConfig>({
+              ...config,
+              sourceCode: payload,
+            }),
+            options,
+          );
+        }
+        return;
+      }
+      case 'appendStructure': {
+        if (mode !== 'update') {
+          if (!config.baseObject) {
+            throw new Error(
+              `appendStructure ${node.name}: missing baseObject (cannot create)`,
+            );
+          }
+          await client
+            .getAppendStructure()
+            .create(asConfig<IAppendStructureConfig>(config), options);
+        }
+        if (payload) {
+          await client.getAppendStructure().update(
+            asConfig<IAppendStructureConfig>({
+              ...config,
+              sourceCode: payload,
+            }),
+            options,
+          );
+        }
         return;
       }
     }

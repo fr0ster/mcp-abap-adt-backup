@@ -63,8 +63,8 @@ export async function readMetadataXmlForType(
         result = responseToText(state.metadataResult);
         break;
       }
-      case 'view': {
-        const state = await client.getView().readMetadata({ viewName: name });
+      case 'ddl': {
+        const state = await client.getDdl().readMetadata({ ddlName: name });
         result = responseToText(state.metadataResult);
         break;
       }
@@ -131,6 +131,27 @@ export async function readMetadataXmlForType(
         const state = await client
           .getAccessControl()
           .readMetadata({ accessControlName: name });
+        result = responseToText(state.metadataResult);
+        break;
+      }
+      case 'scalarFunction': {
+        const state = await client
+          .getScalarFunction()
+          .readMetadata({ scalarFunctionName: name });
+        result = responseToText(state.metadataResult);
+        break;
+      }
+      case 'scalarFunctionImplementation': {
+        const state = await client
+          .getScalarFunctionImplementation()
+          .readMetadata({ implementationName: name });
+        result = responseToText(state.metadataResult);
+        break;
+      }
+      case 'appendStructure': {
+        const state = await client
+          .getAppendStructure()
+          .readMetadata({ appendStructureName: name });
         result = responseToText(state.metadataResult);
         break;
       }

@@ -9,7 +9,9 @@ const supportedTypes: SupportedType[] = [
   'structure',
   'table',
   'tableType',
-  'view',
+  'ddl',
+  'scalarFunction',
+  'scalarFunctionImplementation',
   'class',
   'interface',
   'program',
@@ -21,6 +23,7 @@ const supportedTypes: SupportedType[] = [
   'behaviorDefinition',
   'behaviorImplementation',
   'enhancement',
+  'appendStructure',
   'unitTest',
   'cdsUnitTest',
 ];

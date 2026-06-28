@@ -36,7 +36,25 @@ objectTypes:
       payload: metadata-xml
     restore:
       status: implemented
-  view:
+  ddl:
+    backup:
+      status: implemented
+      payload: source
+    restore:
+      status: implemented
+  scalarFunction:
+    backup:
+      status: implemented
+      payload: source
+    restore:
+      status: implemented
+  scalarFunctionImplementation:
+    backup:
+      status: implemented
+      payload: source
+    restore:
+      status: implemented
+  appendStructure:
     backup:
       status: implemented
       payload: source

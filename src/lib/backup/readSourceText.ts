@@ -33,10 +33,10 @@ export async function readSourceText(
           .read({ transformationName: spec.name }, version);
         return responseToText(state?.readResult);
       }
-      case 'view': {
+      case 'ddl': {
         const state = await client
-          .getView()
-          .read({ viewName: spec.name }, version);
+          .getDdl()
+          .read({ ddlName: spec.name }, version);
         return responseToText(state?.readResult);
       }
       case 'table': {
@@ -118,6 +118,24 @@ export async function readSourceText(
         const state = await client
           .getAccessControl()
           .read({ accessControlName: spec.name }, version);
+        return responseToText(state?.readResult);
+      }
+      case 'scalarFunction': {
+        const state = await client
+          .getScalarFunction()
+          .read({ scalarFunctionName: spec.name }, version);
+        return responseToText(state?.readResult);
+      }
+      case 'scalarFunctionImplementation': {
+        const state = await client
+          .getScalarFunctionImplementation()
+          .read({ implementationName: spec.name }, version);
+        return responseToText(state?.readResult);
+      }
+      case 'appendStructure': {
+        const state = await client
+          .getAppendStructure()
+          .read({ appendStructureName: spec.name }, version);
         return responseToText(state?.readResult);
       }
       default:

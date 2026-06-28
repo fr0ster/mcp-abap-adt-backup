@@ -26,8 +26,14 @@ export function applyConfigName(
     case 'tableType':
       finalConfig.tableTypeName = name;
       break;
-    case 'view':
-      finalConfig.viewName = name;
+    case 'ddl':
+      finalConfig.ddlName = name;
+      break;
+    case 'scalarFunction':
+      finalConfig.scalarFunctionName = name;
+      break;
+    case 'scalarFunctionImplementation':
+      finalConfig.implementationName = name;
       break;
     case 'class':
       finalConfig.className = name;
@@ -72,6 +78,9 @@ export function applyConfigName(
       break;
     case 'accessControl':
       finalConfig.accessControlName = name;
+      break;
+    case 'appendStructure':
+      finalConfig.appendStructureName = name;
       break;
     case 'unitTest':
       finalConfig.className = name;

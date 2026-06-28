@@ -73,7 +73,10 @@ See `docs/roadmap.yaml` for per-object backup/restore status and the plan for re
 | `structure` | implemented | implemented | source |
 | `table` | implemented | implemented | source |
 | `tableType` | implemented | implemented | metadata-xml |
-| `view` | implemented | implemented | source |
+| `ddl` | implemented | implemented | source |
+| `scalarFunction` | implemented | implemented | source |
+| `scalarFunctionImplementation` | implemented | implemented | source |
+| `appendStructure` | implemented | implemented | source |
 | `functionGroup` | implemented | implemented | metadata-xml |
 | `functionModule` | implemented | implemented | source |
 | `interface` | implemented | implemented | source |

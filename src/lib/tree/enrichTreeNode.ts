@@ -7,6 +7,8 @@ import { ensureDescription } from '../utils/ensureDescription';
 import { parseBdefSource } from '../utils/parseBdefSource';
 import { parseBehaviorDefinitionFromClass } from '../utils/parseBehaviorDefinitionFromClass';
 import { extractMetadata } from '../xml/extractMetadata';
+import { parseAppendStructureSource } from '../xml/parseAppendStructureSource';
+import { parseScalarFunctionImplementationConfig } from '../xml/parseScalarFunctionImplementationConfig';
 import { buildConfigForNode } from './buildConfigForNode';
 import { isRestoreImplemented } from './isRestoreImplemented';
 import { mapAdtTypeToSupported } from './mapAdtTypeToSupported';
@@ -18,6 +20,10 @@ export async function enrichTreeNode(
   includeCode: boolean,
   parentFunctionGroupName?: string,
 ): Promise<BackupTreeNode> {
+  // TABL/DS is reported for BOTH plain structures and append structures; ADT does not
+  // distinguish them by type string or hierarchy metadata — only the source content does.
+  // We default to 'structure' here and reclassify to 'appendStructure' after fetching
+  // the payload (see post-payload block below).
   const mappedType = mapAdtTypeToSupported(node.adtType);
   const functionGroupName =
     mappedType === 'functionGroup'
@@ -98,6 +104,42 @@ export async function enrichTreeNode(
           nextNode.config = {
             ...(nextNode.config || {}),
             behaviorDefinition,
+          };
+        }
+      }
+      // DSFI stores its descriptor as JSON in the source payload — not in metadata XML.
+      // Parse scalarFunctionName and engine here, after the payload has been fetched.
+      if (nextNode.type === 'scalarFunctionImplementation') {
+        const sfi = parseScalarFunctionImplementationConfig(payload.payload);
+        if (!sfi.scalarFunctionName) {
+          logVerbose(
+            1,
+            `  [WARN] scalarFunctionImplementation:${node.name} — could not extract scalarFunctionName from source; excluded from restore`,
+          );
+          nextNode.restoreStatus = 'not-implemented';
+        }
+        nextNode.config = {
+          ...(nextNode.config || {}),
+          implementationName: node.name,
+          scalarFunctionName: sfi.scalarFunctionName,
+          engineValue: sfi.engineValue ?? 'sqlEngine',
+        };
+      }
+      // TABL/DS is used for BOTH plain structures and append structures; ADT does not
+      // distinguish them by type string or hierarchy metadata — only the source does.
+      // An append uses `extend type <BASE> with <NAME>`; a plain structure uses
+      // `define structure`. Reclassify here after the source has been fetched.
+      if (node.adtType === 'TABL/DS') {
+        const { baseObject } = parseAppendStructureSource(payload.payload);
+        if (baseObject) {
+          nextNode.type = 'appendStructure';
+          nextNode.restoreStatus = isRestoreImplemented('appendStructure')
+            ? 'ok'
+            : 'not-implemented';
+          nextNode.config = {
+            ...(nextNode.config || {}),
+            appendStructureName: node.name,
+            baseObject,
           };
         }
       }

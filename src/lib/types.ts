@@ -5,7 +5,9 @@ export type SupportedType =
   | 'structure'
   | 'table'
   | 'tableType'
-  | 'view'
+  | 'ddl'
+  | 'scalarFunction'
+  | 'scalarFunctionImplementation'
   | 'class'
   | 'interface'
   | 'program'
@@ -20,6 +22,7 @@ export type SupportedType =
   | 'behaviorImplementation'
   | 'enhancement'
   | 'accessControl'
+  | 'appendStructure'
   | 'unitTest'
   | 'cdsUnitTest';
 

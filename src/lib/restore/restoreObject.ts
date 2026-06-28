@@ -1,9 +1,11 @@
 import type {
   AdtClient,
+  IAppendStructureConfig,
   IBehaviorDefinitionConfig,
   IBehaviorImplementationConfig,
   IClassConfig,
   IDataElementConfig,
+  IDdlConfig,
   IDomainConfig,
   IEnhancementConfig,
   IFunctionGroupConfig,
@@ -13,13 +15,14 @@ import type {
   IMetadataExtensionConfig,
   IPackageConfig,
   IProgramConfig,
+  IScalarFunctionConfig,
+  IScalarFunctionImplementationConfig,
   IServiceBindingConfig,
   IServiceDefinitionConfig,
   IStructureConfig,
   ITableConfig,
   ITableTypeConfig,
   ITransformationConfig,
-  IViewConfig,
 } from '@mcp-abap-adt/adt-clients';
 import type { BackupObject, RestoreMode } from '../types';
 import { applyConfigName } from '../utils/applyConfigName';
@@ -122,15 +125,15 @@ export async function restoreObject(
       }
       return;
     }
-    case 'view': {
+    case 'ddl': {
       if (mode !== 'update') {
-        await client.getView().create(asConfig<IViewConfig>(config), options);
+        await client.getDdl().create(asConfig<IDdlConfig>(config), options);
       }
       if (obj.source) {
         await client
-          .getView()
+          .getDdl()
           .update(
-            asConfig<IViewConfig>({ ...config, ddlSource: obj.source }),
+            asConfig<IDdlConfig>({ ...config, ddlSource: obj.source }),
             options,
           );
       }
@@ -361,6 +364,65 @@ export async function restoreObject(
         await client
           .getTableType()
           .update(asConfig<ITableTypeConfig>(config), options);
+      }
+      return;
+    }
+    case 'scalarFunction': {
+      if (mode !== 'update') {
+        await client
+          .getScalarFunction()
+          .create(asConfig<IScalarFunctionConfig>(config), options);
+      }
+      if (obj.source) {
+        await client.getScalarFunction().update(
+          asConfig<IScalarFunctionConfig>({
+            ...config,
+            sourceCode: obj.source,
+          }),
+          options,
+        );
+      }
+      return;
+    }
+    case 'scalarFunctionImplementation': {
+      if (mode !== 'update') {
+        await client
+          .getScalarFunctionImplementation()
+          .create(
+            asConfig<IScalarFunctionImplementationConfig>(config),
+            options,
+          );
+      }
+      if (obj.source) {
+        await client.getScalarFunctionImplementation().update(
+          asConfig<IScalarFunctionImplementationConfig>({
+            ...config,
+            sourceCode: obj.source,
+          }),
+          options,
+        );
+      }
+      return;
+    }
+    case 'appendStructure': {
+      if (mode !== 'update') {
+        if (!config.baseObject) {
+          throw new Error(
+            `appendStructure ${obj.name}: missing baseObject (cannot create)`,
+          );
+        }
+        await client
+          .getAppendStructure()
+          .create(asConfig<IAppendStructureConfig>(config), options);
+      }
+      if (obj.source) {
+        await client.getAppendStructure().update(
+          asConfig<IAppendStructureConfig>({
+            ...config,
+            sourceCode: obj.source,
+          }),
+          options,
+        );
       }
       return;
     }

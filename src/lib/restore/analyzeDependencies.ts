@@ -21,6 +21,11 @@ function buildAdjacency(
 ): Map<string, Set<string>> {
   const adj = new Map<string, Set<string>>();
 
+  // Reverse edges to apply AFTER the loop, so the per-node adj.set() below
+  // does not clobber them. Used to force co-activation SCCs where only one
+  // side's source/config names the other (DDLS->class, DSFI->DSFD/class).
+  const reverseEdges: Array<[string, string]> = [];
+
   for (const node of nodes) {
     const deps = new Set<string>();
     const id = nodeKey(node);
@@ -95,7 +100,39 @@ function buildAdjacency(
       }
     }
 
+    // Scalar function implementation -> definition (and reverse), via config.
+    if (
+      node.type === 'scalarFunctionImplementation' &&
+      node.config?.scalarFunctionName
+    ) {
+      const defName = String(node.config.scalarFunctionName).toUpperCase();
+      const defId = `SCALARFUNCTION:${defName}`;
+      if (allIds.has(defId) && defId !== id) {
+        deps.add(defId); // forward DSFI -> DSFD
+        reverseEdges.push([defId, id]); // reverse DSFD -> DSFI
+      }
+    }
+
+    // Reverse edges into AMDP classes that this DDLS / DSFI depends on, so the
+    // class joins their activation SCC. Forward edges (this -> class) already
+    // come from the source name-scan above. Restrict to class targets to avoid
+    // dragging unrelated lower-level objects (data elements, domains) into the
+    // group.
+    if (node.type === 'ddl' || node.type === 'scalarFunctionImplementation') {
+      for (const depId of deps) {
+        if (depId.startsWith('CLASS:')) {
+          reverseEdges.push([depId, id]);
+        }
+      }
+    }
+
     adj.set(id, deps);
+  }
+
+  for (const [from, to] of reverseEdges) {
+    const set = adj.get(from) ?? new Set<string>();
+    set.add(to);
+    adj.set(from, set);
   }
 
   return adj;
@@ -256,10 +293,13 @@ const TYPE_CREATION_ORDER: Record<string, number> = {
   structure: 2,
   table: 2,
   tableType: 2,
-  view: 3,
+  appendStructure: 3,
+  ddl: 3,
+  scalarFunction: 3,
   behaviorDefinition: 4,
   behaviorImplementation: 5,
   class: 5,
+  scalarFunctionImplementation: 6,
   interface: 5,
   accessControl: 6,
   metadataExtension: 6,
