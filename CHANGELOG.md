@@ -8,6 +8,12 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+## [1.6.1] - 2026-06-28
+
+### Changed
+- CI and release workflows build on **Node 22** (dropped Node 20); bumped GitHub Actions (`actions/checkout@v5`, `actions/setup-node@v5`, `softprops/action-gh-release@v2`), clearing the Node 20 runtime deprecation warning.
+- `engines.node` raised to `>=22.0.0`.
+
 ## [1.6.0] - 2026-06-28
 
 ### Added
