@@ -45,7 +45,7 @@
     "debug:deps": "npx ts-node scripts/debug-where-used-list.ts"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "dependencies": {
     "@mcp-abap-adt/adt-clients": "^6.0.0",
