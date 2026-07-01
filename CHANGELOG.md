@@ -8,6 +8,13 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+## [1.6.2] - 2026-07-01
+
+### Security
+- Resolved all open Dependabot alerts (18 total: 11 high / 6 medium / 1 low, all transitive). `npm audit`: 0 vulnerabilities.
+- `@mcp-abap-adt/adt-clients` `^6.0.0` → `^7.2.1` — pulls **axios 1.18.1** (was 1.15.1), fixing axios ReDoS / proxy-auth leak / prototype-pollution (MitM), plus `follow-redirects` and `form-data`. No API changes affect this project.
+- Updated `@mcp-abap-adt/auth-broker` (esbuild), `@mcp-abap-adt/auth-providers` (express → qs / path-to-regexp), `@mcp-abap-adt/connection`, and `fast-xml-parser` (fast-xml-builder); pinned patched transitives via lockfile (`form-data` 4.0.6, `path-to-regexp` 8.4.2, `qs` 6.15.3).
+
 ## [1.6.1] - 2026-06-28
 
 ### Changed
