@@ -43,21 +43,11 @@ jobs:
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: ${{ steps.package.outputs.filename }}
-          generate_release_notes: true
-          draft: false
-          prerelease: false
-          body: |
-            ## Installation
-
-            Download the `.tgz` package and install:
-
-            ```bash
-            npm install -g ./${{ steps.package.outputs.filename }}
-            ```
-
-            ## What's Changed
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          gh release create "$TAG" \
+            "${{ steps.package.outputs.filename }}" \
+            --title "$TAG" \
+            --generate-notes
