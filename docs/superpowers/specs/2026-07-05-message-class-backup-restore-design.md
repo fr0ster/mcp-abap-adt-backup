@@ -27,8 +27,17 @@ backup/restore/verify support for ABAP **Message Classes** (`MSAG/N`, SE91) as a
     `selfExplanatory?`, `description?`, `transportRequest?`) via a read-modify-write of the
     parent class XML.
 
-Helpers exported: `parseMessageClass(xml)`, `buildMessageClassXml(cls)`,
-`IParsedMessage`, `IParsedMessageClass`.
+Public root exports (`@mcp-abap-adt/adt-clients`): `IMessageClassConfig`,
+`IMessageClassMessageConfig`, `IMessageClassState`, `IMessageClassMessageState`,
+`AdtMessageClass`, `AdtMessageClassMessage`.
+
+**Not exported from the package root:** `parseMessageClass`, `buildMessageClassXml`,
+`IParsedMessage`, `IParsedMessageClass` — they live in `core/messageClass` but are not re-exported,
+and deep import (`@mcp-abap-adt/adt-clients/dist/core/messageClass`) is blocked by the package
+`exports` field (`ERR_PACKAGE_PATH_NOT_EXPORTED`, verified at planning time). Consequence: we
+**cannot** persist raw class XML and re-parse it on restore. Instead we rely on the **already-parsed**
+object that `read()` returns (`state.messageClass`), which is typed structurally in our own code (see
+the local `ParsedMessageClass` shape in the plan).
 
 Content type: `application/vnd.sap.adt.mc.messageclass+xml`.
 
@@ -42,39 +51,45 @@ texts after the shell is created.
 Note this is *backup-unit* coupling, not transactional restore: restore applies the messages via
 per-message read-modify-write calls (see Restore below), so it is not a single atomic operation.
 
-- **Backup:** one `messageClass` tree node, one payload = the full class XML (all messages inside).
-- **Restore:** create shell → upsert each message from the parsed payload → delete target-only
-  extras.
+- **Backup:** one `messageClass` tree node, one payload = **JSON** of the parsed class
+  (`read().messageClass`: name, description, packageName, language, `messages[]`).
+- **Restore:** create shell (from the parsed JSON) → upsert each message → delete target-only extras.
 
 ## Payload format
 
-`codeFormat = 'xml'` (the schema's XML kind — `BackupTreeNode.codeFormat` is
-`'source' | 'xml' | 'json'`, and existing metadata payloads use `'xml'`). The payload is the
-raw class XML from `read().readResult.data`, consistent with other metadata-XML types
-(domain, package, dataElement, …), which `readPayloadForType` returns with `format: 'xml'`.
+`codeFormat = 'json'` (`BackupTreeNode.codeFormat` is `'source' | 'xml' | 'json'`). The payload is
+`JSON.stringify` of the parsed class returned by `read().messageClass` — a `ParsedMessageClass`
+`{ name, description?, packageName?, language?, masterLanguage?, messages: ParsedMessage[] }`, where
+`ParsedMessage` is `{ msgno, msgtext, selfExplanatory?, description? }`. JSON (not raw XML) because
+the XML parser needed to reconstruct messages on restore is not reachable (see API note above).
 
 ## Backup (read)
 
-`readMetadataXmlForType` gains a `messageClass` case:
+`readPayloadForType` gains a dedicated `messageClass` branch (not the generic metadata branch):
 
 ```ts
 case 'messageClass': {
   const state = await client.getMessageClass().read({ name });
-  if (!state) throw new Error(`Message class ${name} not found`);
-  return String(state.readResult.data); // full XML incl. <mc:messages>
+  if (!state?.messageClass) return {};
+  return { payload: JSON.stringify(state.messageClass), format: 'json' };
 }
 ```
 
-The flat `--objects` path (`backupObject.ts`) gets the matching case.
+`readMetadataXmlForType` also gains a `messageClass` case returning the raw XML
+(`state.readResult.data`) — used only by `findOtherType` type-probing and as the verify entry read;
+it is **not** the restore payload. The flat `--objects` path (`backupObject.ts`) gets a matching
+case that stores the JSON in `BackupObject.source` and a minimal `config` (`{ name, packageName,
+description }`) derived from the parsed class.
 
 ## Restore
 
 `restoreObject` gains a `messageClass` case:
 
-1. **Shell** — `getMessageClass().create({ name, description, packageName, transportRequest })`.
-   Idempotent: if the class already exists (verify → update mode), update the description via
-   `getMessageClass().update(...)` instead of create.
-2. **Messages — full reconcile.** `parseMessageClass(payloadXml)` gives the backup's message set.
+1. **Shell** — `JSON.parse(payload)` yields the `ParsedMessageClass`. Create via
+   `getMessageClass().create({ name, description, packageName, transportRequest })` using the parsed
+   class's own `description`/`packageName`. Idempotent: if the class already exists (verify → update
+   mode), update the description via `getMessageClass().update(...)` instead of create.
+2. **Messages — full reconcile.** The parsed JSON gives the backup's message set.
    Restore must make the target class's message set *equal* to the backup, not merely merge. This
    is done as a loop of per-message read-modify-write operations (each
    `getMessageClassMessage()` call internally GET-locks-PUTs the whole class), so it is **not
@@ -92,9 +107,9 @@ The flat `--objects` path (`backupObject.ts`) gets the matching case.
 3. **No activation** — MSAG is not activatable. This requires an explicit exclusion in restore
    orchestration (see *Activation exclusion* below), not just documentation.
 
-The class `description` for the shell comes from the parsed payload (`parseMessageClass`), so
-`buildConfigForNode` / `applyConfigName` only need name + package + transport; message texts
-are re-derived from the payload at restore time, not from `config`.
+The class `description`, `packageName`, and message texts for the shell all come from the parsed
+JSON payload (`JSON.parse` → `ParsedMessageClass`), so `applyConfigName` only needs to set `name`;
+nothing about the restore depends on `config` beyond that.
 
 ## Activation exclusion (required)
 
@@ -131,12 +146,16 @@ fallback phase path restores it; with the guard, that phase produces no activati
 Compare **all attributes**, at minimum the class description and every message's attributes
 (`msgno`, `msgtext`, `selfExplanatory`, `description`) — not just `msgno → msgtext`.
 
-- `verifyObjectInSystem` (`messageClass`): read the system XML, parse both sides with
-  `parseMessageClass`, canonicalize (sort messages by `msgno`, stable attribute order, trim
-  whitespace), and compare the full canonical form including class + message descriptions.
-- `diff`: unified diff over the canonical serialization of both sides.
-- Only genuinely non-deterministic server metadata (e.g. `masterSystem`, change timestamps if
-  present) is excluded from the comparison; everything the user authored is compared.
+- A shared helper `canonicalizeMessageClass(cls: ParsedMessageClass): string` produces a stable
+  string: messages sorted by `msgno`, each rendered as its `{ msgno, msgtext, selfExplanatory,
+  description }` fields in fixed order, plus the class `description`. Only user-authored fields are
+  included; volatile server metadata (`masterSystem`, `responsible`, timestamps) is dropped.
+- `verifyObjectInSystem` (`messageClass`): a dedicated branch reads the system via
+  `getMessageClass().read()` (→ `state.messageClass`), `JSON.parse`es the backup payload, and
+  compares `canonicalizeMessageClass(system)` vs `canonicalizeMessageClass(backup)` → `source-mismatch`
+  on difference (after the package check).
+- `diff` (`run.ts`): a dedicated `messageClass` branch (the payload is `json`, not `xml`/`source`, so
+  neither existing branch fits) runs `diffUnified` over the two canonical strings.
 
 ## Registry threading (same pattern as scalarFunction / appendStructure)
 
@@ -145,17 +164,22 @@ Thread `messageClass` through every per-type registry:
 - `types.ts` — add `'messageClass'` to `SupportedType`.
 - `mapAdtTypeToSupported.ts` — `MSAG/N` → `messageClass`.
 - `normalizeType.ts`, `typeOrder.ts`, `isRestoreImplemented.ts`, `findOtherType.ts`.
-- `readPayloadForType.ts`, `readMetadataXmlForType.ts`, `backupObject.ts`.
-- `restoreObject.ts`, `restoreTreeNode.ts`, `restoreObjects.ts`, `buildConfigForNode.ts`,
-  `applyConfigName.ts`.
-- `restoreTreeBackup.ts` — add a `RESTORE_PHASES` entry for `messageClass` (early tier) and guard the
-  activation-ref emission with `isActivatable`.
-- New `isActivatable(type)` helper (e.g. in `restore/`) — `false` for `messageClass`; used at both
-  activation-ref sites (`restoreTreeBackup.processNode`, `restoreObjects`).
+- `readPayloadForType.ts` (dedicated `json` branch), `readMetadataXmlForType.ts` (raw-XML case),
+  `backupObject.ts` (JSON in `source`).
+- `restoreObject.ts`, `restoreTreeNode.ts`, `applyConfigName.ts` (`name`). `restoreObjects.ts` needs
+  **no** change — its activation guard keys on `ADT_TYPE_MAP[obj.type]`, and we deliberately do not
+  add `messageClass` there, so no activation ref is emitted. `buildConfigForNode.ts` default case
+  already yields `{ description, packageName, name }`; no new case needed.
+- `restoreTreeBackup.ts` — add a `RESTORE_PHASES` entry for `messageClass` (early tier, `individual`)
+  and guard the activation-ref emission (`processNode`, line ~270) with `isActivatable(node.type)`.
+- New `isActivatable(type)` helper in `restore/` — returns `false` for `messageClass`, `true`
+  otherwise; used at the `restoreTreeBackup.processNode` activation-ref site.
+- New `canonicalizeMessageClass` + a local `ParsedMessageClass`/`ParsedMessage` type (e.g. in
+  `xml/` or `verify/`), used by verify and diff.
 - `analyzeDependencies.ts` — `TYPE_CREATION_ORDER` entry (low), no SCC/co-activation change.
 - `dependencies/collectTreeDependencies.ts` — add `messageClass: 'MSAG/N'` to `WHERE_USED_TYPE_MAP`
   (parity only; does not drive ordering).
-- `verifyObjectInSystem.ts` / diff path.
+- `verifyObjectInSystem.ts` (dedicated branch) and `run.ts` diff (dedicated branch).
 - Docs: `docs/roadmap.yaml`, `docs/SMOKE_CHECKLIST.md`, `CLAUDE.md`, `README.md`, `CHANGELOG.md`.
 - `package.json` — bump `@mcp-abap-adt/adt-clients` to `^7.3.1`.
 
