@@ -32,15 +32,19 @@ Helpers exported: `parseMessageClass(xml)`, `buildMessageClassXml(cls)`,
 
 Content type: `application/vnd.sap.adt.mc.messageclass+xml`.
 
-## Key decision: message class is one atomic entity
+## Key decision: message class is one backup unit
 
-A message class and its messages are a **single coupled unit**. We never back up or restore
-individual messages as separate objects — there is no separate `SupportedType` for a message.
-`getMessageClassMessage()` is purely an internal restore mechanism to set the message texts
-after the shell is created.
+A message class and its messages are a **single coupled unit at the backup level**. We never back
+up or restore individual messages as separate objects — there is no separate `SupportedType` for a
+message. `getMessageClassMessage()` is purely an internal restore mechanism to set the message
+texts after the shell is created.
+
+Note this is *backup-unit* coupling, not transactional restore: restore applies the messages via
+per-message read-modify-write calls (see Restore below), so it is not a single atomic operation.
 
 - **Backup:** one `messageClass` tree node, one payload = the full class XML (all messages inside).
-- **Restore:** create shell → upsert each message from the parsed payload.
+- **Restore:** create shell → upsert each message from the parsed payload → delete target-only
+  extras.
 
 ## Payload format
 
@@ -70,9 +74,13 @@ The flat `--objects` path (`backupObject.ts`) gets the matching case.
 1. **Shell** — `getMessageClass().create({ name, description, packageName, transportRequest })`.
    Idempotent: if the class already exists (verify → update mode), update the description via
    `getMessageClass().update(...)` instead of create.
-2. **Messages — full reconcile (atomic).** `parseMessageClass(payloadXml)` gives the backup's
-   message set. Because a message class + its messages are one atomic unit, restore must make the
-   target class *equal* to the backup, not merely merge:
+2. **Messages — full reconcile.** `parseMessageClass(payloadXml)` gives the backup's message set.
+   Restore must make the target class's message set *equal* to the backup, not merely merge. This
+   is done as a loop of per-message read-modify-write operations (each
+   `getMessageClassMessage()` call internally GET-locks-PUTs the whole class), so it is **not
+   transactional** — a mid-loop failure can leave the target partially updated. Mitigation: restore
+   is idempotent and re-runnable, and post-restore `verify` (full-attribute compare) detects any
+   incomplete state.
    - **Upsert** every backup message via
      `getMessageClassMessage().update({ className: name, msgno, msgtext, selfExplanatory,
      description, transportRequest })`.
@@ -80,23 +88,42 @@ The flat `--objects` path (`backupObject.ts`) gets the matching case.
      message present in the target but **absent from the backup**, call
      `getMessageClassMessage().delete({ className: name, msgno, transportRequest })`. On fresh
      create there are no pre-existing messages, so no deletes are issued.
-   This guarantees post-restore verify passes (no stale extra messages survive).
-3. **No activation** — MSAG is not activatable. Distinct from the AMDP/scalar co-activation group.
+   The reconcile guarantees a completed restore leaves no stale extra messages.
+3. **No activation** — MSAG is not activatable. This requires an explicit exclusion in restore
+   orchestration (see *Activation exclusion* below), not just documentation.
 
 The class `description` for the shell comes from the parsed payload (`parseMessageClass`), so
 `buildConfigForNode` / `applyConfigName` only need name + package + transport; message texts
 are re-derived from the payload at restore time, not from `config`.
 
+## Activation exclusion (required)
+
+MSAG is not activatable, but the restore orchestrators currently emit an activation reference for
+*any* restored node that has an `adtType`:
+
+- `restoreTreeBackup.ts` `processNode` — `if (shouldActivate && node.adtType) return { name, type: node.adtType }` (line ~270); the ref then flows into `activateObjectsGroup` for `bulk`/`cluster` phases.
+- `restoreObjects.ts` — pushes `{ name, type: ADT_TYPE_MAP[obj.type] }` to `activationList` for every non-package object (line ~82).
+
+So "no activation" must be enforced in code. Introduce a small `isActivatable(type: SupportedType): boolean`
+helper (returns `false` for `messageClass`) and guard both activation-ref sites with it. Also add a
+`RESTORE_PHASES` entry for `messageClass` (early tier, alongside domains/data elements) so the
+fallback phase path restores it; with the guard, that phase produces no activation refs.
+
 ## Ordering / dependencies
 
-- `TYPE_CREATION_ORDER['messageClass']` = low (same tier as `domain` / `dataElement`), so the
-  class is restored before consumers (classes/programs that reference it via `MESSAGE ID`).
-- **No co-activation.** Not part of any SCC group, never bulk-activated. This is intentionally
-  the opposite of the AMDP/scalar-function group — MSAG has no outgoing dependencies and is not
-  activatable.
-- Where-used (`usedBy`) edges are **not automatic** — `collectTreeDependencies` only queries
-  where-used for types listed in `WHERE_USED_TYPE_MAP`. Add `messageClass: 'MSAG/N'` to that map so
-  `consumer → messageClass` edges are collected and consumers restore after the message class.
+- `TYPE_CREATION_ORDER['messageClass']` = low (same tier as `domain` / `dataElement`) — this is the
+  **primary** ordering driver: within the plan/fallback grouping, message classes sort ahead of
+  classes/programs.
+- **Source name-scan** in `buildAdjacency` is the secondary driver: a consumer's source that
+  references the class by name (e.g. `MESSAGE e001(ZMSG)`) already yields a `consumer → messageClass`
+  edge via the existing content scan (`analyzeDependencies.ts` lines ~40–53). No new structural-edge
+  code is needed for ordering.
+- **`usedBy` does not affect ordering.** `analyzeDependencyLevels()` / `buildAdjacency()` do **not**
+  consume `node.usedBy`; it is informational metadata only. Adding `messageClass: 'MSAG/N'` to
+  `WHERE_USED_TYPE_MAP` (in `collectTreeDependencies.ts`) is still done for parity/completeness with
+  every other type, but the spec does **not** rely on it for restore ordering.
+- **No co-activation.** Not part of any SCC group, never bulk-activated — intentionally the opposite
+  of the AMDP/scalar-function group. MSAG has no outgoing dependencies and is not activatable.
 
 ## Verify / diff
 
@@ -120,8 +147,13 @@ Thread `messageClass` through every per-type registry:
 - `readPayloadForType.ts`, `readMetadataXmlForType.ts`, `backupObject.ts`.
 - `restoreObject.ts`, `restoreTreeNode.ts`, `restoreObjects.ts`, `buildConfigForNode.ts`,
   `applyConfigName.ts`.
+- `restoreTreeBackup.ts` — add a `RESTORE_PHASES` entry for `messageClass` (early tier) and guard the
+  activation-ref emission with `isActivatable`.
+- New `isActivatable(type)` helper (e.g. in `restore/`) — `false` for `messageClass`; used at both
+  activation-ref sites (`restoreTreeBackup.processNode`, `restoreObjects`).
 - `analyzeDependencies.ts` — `TYPE_CREATION_ORDER` entry (low), no SCC/co-activation change.
-- `dependencies/collectTreeDependencies.ts` — add `messageClass: 'MSAG/N'` to `WHERE_USED_TYPE_MAP`.
+- `dependencies/collectTreeDependencies.ts` — add `messageClass: 'MSAG/N'` to `WHERE_USED_TYPE_MAP`
+  (parity only; does not drive ordering).
 - `verifyObjectInSystem.ts` / diff path.
 - Docs: `docs/roadmap.yaml`, `docs/SMOKE_CHECKLIST.md`, `CLAUDE.md`, `README.md`, `CHANGELOG.md`.
 - `package.json` — bump `@mcp-abap-adt/adt-clients` to `^7.3.1`.
