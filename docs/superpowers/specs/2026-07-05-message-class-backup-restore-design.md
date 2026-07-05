@@ -122,7 +122,8 @@ fallback phase path restores it; with the guard, that phase produces no activati
   consume `node.usedBy`; it is informational metadata only. Adding `messageClass: 'MSAG/N'` to
   `WHERE_USED_TYPE_MAP` (in `collectTreeDependencies.ts`) is still done for parity/completeness with
   every other type, but the spec does **not** rely on it for restore ordering.
-- **No co-activation.** Not part of any SCC group, never bulk-activated — intentionally the opposite
+- **No co-activation.** Stays a singleton SCC, never joined into a multi-node co-activation group and
+  excluded from activation refs entirely — intentionally the opposite
   of the AMDP/scalar-function group. MSAG has no outgoing dependencies and is not activatable.
 
 ## Verify / diff
