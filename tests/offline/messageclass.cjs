@@ -62,5 +62,51 @@ console.log('OK task1');
   assert.strictEqual(obj.config.packageName, 'ZPKG', 'flat backup config packageName');
   assert.strictEqual(JSON.parse(obj.source).messages.length, 2, 'flat backup source json');
 
-  console.log('OK task2');
+  // --- Task 3: restore helper + activation gate ---
+  const { restoreMessageClass } = require('../../dist/lib/messageClass/restoreMessageClass');
+  const { isActivatable } = require('../../dist/lib/restore/isActivatable');
+
+  assert.strictEqual(isActivatable('messageClass'), false, 'messageClass not activatable');
+  assert.strictEqual(isActivatable('class'), true, 'class activatable');
+
+  function fakeRestoreClient(existingMsgnos) {
+    const calls = { create: 0, update: 0, msgUpsert: [], msgDelete: [] };
+    return {
+      calls,
+      getMessageClass() {
+        return {
+          async create() { calls.create++; },
+          async update() { calls.update++; },
+          async read() {
+            return { messageClass: { messages: existingMsgnos.map((n) => ({ msgno: n, msgtext: 'x' })) } };
+          },
+        };
+      },
+      getMessageClassMessage() {
+        return {
+          async update(cfg) { calls.msgUpsert.push(cfg.msgno); },
+          async delete(cfg) { calls.msgDelete.push(cfg.msgno); },
+        };
+      },
+    };
+  }
+
+  const parsed = { name: 'ZMY_MSG', description: 'd', packageName: 'ZPKG',
+    messages: [{ msgno: '001', msgtext: 'a' }, { msgno: '002', msgtext: 'b' }] };
+
+  // create mode: shell created, both messages upserted, nothing deleted
+  const c1 = fakeRestoreClient([]);
+  await restoreMessageClass(c1, parsed, { mode: 'create', name: 'ZMY_MSG', description: 'd', packageName: 'ZPKG' });
+  assert.strictEqual(c1.calls.create, 1, 'create shell once');
+  assert.deepStrictEqual(c1.calls.msgUpsert.sort(), ['001', '002'], 'upsert both');
+  assert.deepStrictEqual(c1.calls.msgDelete, [], 'no deletes on create');
+
+  // update mode: target has extra '003' -> it must be deleted
+  const c2 = fakeRestoreClient(['001', '002', '003']);
+  await restoreMessageClass(c2, parsed, { mode: 'update', name: 'ZMY_MSG', description: 'd', packageName: 'ZPKG' });
+  assert.strictEqual(c2.calls.update, 1, 'update shell once');
+  assert.deepStrictEqual(c2.calls.msgUpsert.sort(), ['001', '002'], 'upsert both on update');
+  assert.deepStrictEqual(c2.calls.msgDelete, ['003'], 'delete target-only extra');
+
+  console.log('OK task3');
 })().catch((e) => { console.error(e); process.exit(1); });
