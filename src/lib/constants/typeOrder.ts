@@ -4,6 +4,7 @@ export const typeOrder: SupportedType[] = [
   'package',
   'domain',
   'dataElement',
+  'messageClass',
   'structure',
   'table',
   'appendStructure',

@@ -45,6 +45,8 @@ export function normalizeType(rawType: string): SupportedType {
     behaviorimplementation: 'behaviorImplementation',
     behavior_implementation: 'behaviorImplementation',
     enhancement: 'enhancement',
+    messageclass: 'messageClass',
+    message_class: 'messageClass',
     unittest: 'unitTest',
     unit_test: 'unitTest',
     cdsunittest: 'cdsUnitTest',

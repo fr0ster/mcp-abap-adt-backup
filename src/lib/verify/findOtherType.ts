@@ -24,6 +24,7 @@ const supportedTypes: SupportedType[] = [
   'behaviorImplementation',
   'enhancement',
   'appendStructure',
+  'messageClass',
   'unitTest',
   'cdsUnitTest',
 ];
