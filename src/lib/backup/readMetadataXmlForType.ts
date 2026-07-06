@@ -155,6 +155,11 @@ export async function readMetadataXmlForType(
         result = responseToText(state.metadataResult);
         break;
       }
+      case 'messageClass': {
+        const state = await client.getMessageClass().read({ name });
+        result = state?.readResult?.data as string | undefined;
+        break;
+      }
       default:
         return undefined;
     }

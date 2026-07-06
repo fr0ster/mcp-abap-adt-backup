@@ -36,6 +36,13 @@ export async function readPayloadForType(
       });
       return { payload: payload ?? undefined, format: 'source' };
     }
+    case 'messageClass': {
+      const state = await client.getMessageClass().read({ name });
+      if (!state?.messageClass) {
+        return {};
+      }
+      return { payload: JSON.stringify(state.messageClass), format: 'json' };
+    }
     case 'domain':
     case 'dataElement':
     case 'package':
