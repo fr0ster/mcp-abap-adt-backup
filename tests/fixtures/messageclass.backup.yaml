@@ -1,0 +1,21 @@
+schemaVersion: 2
+package: ZTEST_MSAG
+root:
+  type: package
+  name: ZTEST_MSAG
+  restoreStatus: ok
+  children:
+    - type: messageClass
+      name: ZMY_MSG
+      restoreStatus: ok
+      codeFormat: json
+      config:
+        name: ZMY_MSG
+      # {"name":"ZMY_MSG","description":"My messages","packageName":"ZTEST_MSAG","messages":[{"msgno":"001","msgtext":"First"},{"msgno":"002","msgtext":"Second","selfExplanatory":true}]}
+      codeBase64: eyJuYW1lIjoiWk1ZX01TRyIsImRlc2NyaXB0aW9uIjoiTXkgbWVzc2FnZXMiLCJwYWNrYWdlTmFtZSI6IlpURVNUX01TQUciLCJtZXNzYWdlcyI6W3sibXNnbm8iOiIwMDEiLCJtc2d0ZXh0IjoiRmlyc3QifSx7Im1zZ25vIjoiMDAyIiwibXNndGV4dCI6IlNlY29uZCIsInNlbGZFeHBsYW5hdG9yeSI6dHJ1ZX1dfQ==
+    - type: class
+      name: ZCL_USES_MSG
+      restoreStatus: ok
+      codeFormat: source
+      # "CLASS zcl_uses_msg DEFINITION. METHOD m. MESSAGE e001(ZMY_MSG). ENDCLASS."
+      codeBase64: Q0xBU1MgemNsX3VzZXNfbXNnIERFRklOSVRJT04uIE1FVEhPRCBtLiBNRVNTQUdFIGUwMDEoWk1ZX01TRykuIEVORENMQVNTLg==
