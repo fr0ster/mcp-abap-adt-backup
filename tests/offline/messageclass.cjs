@@ -108,5 +108,26 @@ console.log('OK task1');
   assert.deepStrictEqual(c2.calls.msgUpsert.sort(), ['001', '002'], 'upsert both on update');
   assert.deepStrictEqual(c2.calls.msgDelete, ['003'], 'delete target-only extra');
 
-  console.log('OK task3');
+  // --- Task 4: restoreObject / restoreTreeNode delegate to helper ---
+  const { restoreObject } = require('../../dist/lib/restore/restoreObject');
+  const { restoreTreeNode } = require('../../dist/lib/restore/restoreTreeNode');
+
+  const objClient = fakeRestoreClient([]);
+  await restoreObject(objClient, {
+    id: 'MESSAGECLASS:ZMY_MSG', type: 'messageClass', name: 'ZMY_MSG',
+    config: { name: 'ZMY_MSG' }, source: JSON.stringify(parsed),
+  }, 'create', false);
+  assert.strictEqual(objClient.calls.create, 1, 'restoreObject creates shell');
+  assert.deepStrictEqual(objClient.calls.msgUpsert.sort(), ['001', '002'], 'restoreObject upserts messages');
+
+  const treeClient = fakeRestoreClient([]);
+  const codeBase64 = Buffer.from(JSON.stringify(parsed), 'utf8').toString('base64');
+  await restoreTreeNode(treeClient, {
+    type: 'messageClass', name: 'ZMY_MSG', restoreStatus: 'ok',
+    codeFormat: 'json', codeBase64, config: { name: 'ZMY_MSG' },
+  }, 'create', false);
+  assert.strictEqual(treeClient.calls.create, 1, 'restoreTreeNode creates shell');
+  assert.deepStrictEqual(treeClient.calls.msgUpsert.sort(), ['001', '002'], 'restoreTreeNode upserts messages');
+
+  console.log('OK task4');
 })().catch((e) => { console.error(e); process.exit(1); });
