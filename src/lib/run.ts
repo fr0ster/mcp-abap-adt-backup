@@ -28,6 +28,7 @@ import { collectTreeDependencies } from './dependencies/collectTreeDependencies'
 import { canonicalizeMessageClass } from './messageClass/canonicalizeMessageClass';
 import type { ParsedMessageClass } from './messageClass/types';
 import { analyzeDependencyLevels } from './restore/analyzeDependencies';
+import { isActivatable } from './restore/isActivatable';
 import { restoreTreeBackup } from './restore/restoreTreeBackup';
 import { verbosityState } from './state/verbosity';
 import { buildPackageBackupTree } from './tree/buildPackageBackupTree';
@@ -541,7 +542,12 @@ export async function run(): Promise<void> {
     for (const group of plan.groups) {
       const groupRefs: ObjectReference[] = [];
       for (const action of group.actions) {
-        if (action.type === 'package' || !action.adtType) continue;
+        if (
+          action.type === 'package' ||
+          !action.adtType ||
+          !isActivatable(action.type)
+        )
+          continue;
         const key = `${action.adtType}:${action.name}`.toUpperCase();
         if (inactiveSet.has(key)) {
           groupRefs.push({ name: action.name, type: action.adtType });

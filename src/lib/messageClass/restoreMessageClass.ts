@@ -31,7 +31,7 @@ export async function restoreMessageClass(
     await mc.create({ name, description, packageName, transportRequest });
   } else {
     // update (or upsert already resolved): sync the shell description
-    await mc.update({ name, description });
+    await mc.update({ name, description, packageName, transportRequest });
   }
 
   for (const msg of parsed.messages) {
