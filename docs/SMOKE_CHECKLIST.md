@@ -135,3 +135,7 @@ Expected:
 - The backup file captures `appendStructure` config field `baseObject`
 - **GATING CHECK — append-structure classification**: confirm that the append object appears in the backup as an `appendStructure` node (NOT `structure`) with a populated `baseObject` field. If it instead shows up as `structure`, the append-detection heuristic in `enrichTreeNode.ts` did not fire (no append marker in the hierarchy response); in that case, add a content-inspection fallback (detect the DDIC EXTEND/append marker in the fetched metadata XML) before the type is resolved.
 - **NOTE**: The flat `--objects` path now captures `scalarFunctionName`/`engineValue` for `scalarFunctionImplementation` and `baseObject` for `appendStructure`, and **fails loudly** if a required field cannot be extracted from source. The `--package` path warns and marks the node `not-implemented` instead of aborting the whole walk.
+
+## 9) Message class (MSAG)
+
+- [ ] Message class (`MSAG`): backup a class with >=2 messages; restore into a scratch package; `verify` reports OK; edit one message text in the target, re-run `verify` → `source-mismatch`; re-`restore` → OK; add a stray message in the target, re-`restore` → stray removed (reconcile).

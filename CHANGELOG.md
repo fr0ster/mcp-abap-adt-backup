@@ -5,8 +5,10 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Message class (`MSAG`) backup/restore/verify/diff support. Class and its messages are one atomic backup unit (JSON payload); restore creates the shell, upserts messages, and reconciles (deletes target-only messages). Not activatable; restored early with no co-activation.
 
 ### Changed
+- Bump `@mcp-abap-adt/adt-clients` to `^7.3.1` (adds message-class module).
 
 ## [1.6.2] - 2026-07-01
 
