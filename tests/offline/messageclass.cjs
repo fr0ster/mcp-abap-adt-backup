@@ -129,5 +129,19 @@ console.log('OK task1');
   assert.strictEqual(treeClient.calls.create, 1, 'restoreTreeNode creates shell');
   assert.deepStrictEqual(treeClient.calls.msgUpsert.sort(), ['001', '002'], 'restoreTreeNode upserts messages');
 
-  console.log('OK task4');
+  // --- Task 6: canonicalization ---
+  const { canonicalizeMessageClass } = require('../../dist/lib/messageClass/canonicalizeMessageClass');
+  const a = canonicalizeMessageClass({ name: 'Z', description: 'd',
+    messages: [{ msgno: '002', msgtext: 'b' }, { msgno: '001', msgtext: 'a' }] });
+  const b = canonicalizeMessageClass({ name: 'Z', description: 'd',
+    messages: [{ msgno: '001', msgtext: 'a' }, { msgno: '002', msgtext: 'b' }] });
+  assert.strictEqual(a, b, 'canonical form is order-independent');
+  const c = canonicalizeMessageClass({ name: 'Z', description: 'd',
+    messages: [{ msgno: '001', msgtext: 'CHANGED' }, { msgno: '002', msgtext: 'b' }] });
+  assert.notStrictEqual(a, c, 'canonical form reflects msgtext changes');
+  const d = canonicalizeMessageClass({ name: 'Z', description: 'DIFFERENT',
+    messages: [{ msgno: '001', msgtext: 'a' }, { msgno: '002', msgtext: 'b' }] });
+  assert.notStrictEqual(a, d, 'canonical form reflects class description changes');
+
+  console.log('OK task6');
 })().catch((e) => { console.error(e); process.exit(1); });

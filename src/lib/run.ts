@@ -25,6 +25,8 @@ import { updateTreeChecksums } from './crypto/updateTreeChecksums';
 import { verifyBackupChecksum } from './crypto/verifyBackupChecksum';
 import { verifyTreeChecksums } from './crypto/verifyTreeChecksums';
 import { collectTreeDependencies } from './dependencies/collectTreeDependencies';
+import { canonicalizeMessageClass } from './messageClass/canonicalizeMessageClass';
+import type { ParsedMessageClass } from './messageClass/types';
 import { analyzeDependencyLevels } from './restore/analyzeDependencies';
 import { restoreTreeBackup } from './restore/restoreTreeBackup';
 import { verbosityState } from './state/verbosity';
@@ -681,7 +683,23 @@ export async function run(): Promise<void> {
         const node = findNodeInTree(parsed.root, spec);
         if (!node || !node.codeBase64) throw new Error('Object not found');
         const backupText = decodeBase64(node.codeBase64);
-        if (node.codeFormat === 'xml') {
+        if (node.type === 'messageClass') {
+          const state = await client
+            .getMessageClass()
+            .read({ name: node.name });
+          const backupCanon = canonicalizeMessageClass(
+            JSON.parse(backupText) as ParsedMessageClass,
+          );
+          const systemCanon = state?.messageClass
+            ? canonicalizeMessageClass(state.messageClass as ParsedMessageClass)
+            : '';
+          await diffSource(
+            formatObjectSpec(spec),
+            backupCanon,
+            systemCanon,
+            true,
+          );
+        } else if (node.codeFormat === 'xml') {
           const metadataXml = await readMetadataXmlForType(
             client,
             node.type!,

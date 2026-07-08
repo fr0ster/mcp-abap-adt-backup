@@ -2,6 +2,8 @@ import type { AdtClient } from '@mcp-abap-adt/adt-clients';
 import { readMetadataXmlForType } from '../backup/readMetadataXmlForType';
 import { readSourceText } from '../backup/readSourceText';
 import { decodeBase64 } from '../crypto/decodeBase64';
+import { canonicalizeMessageClass } from '../messageClass/canonicalizeMessageClass';
+import type { ParsedMessageClass } from '../messageClass/types';
 import type { ObjectSpec } from '../types';
 import { extractMetadata } from '../xml/extractMetadata';
 import type { VerifyEntry } from './types';
@@ -24,6 +26,46 @@ export async function verifyObjectInSystem(
   };
 
   try {
+    if (spec.type === 'messageClass') {
+      const state = await client.getMessageClass().read({ name: spec.name });
+      if (!state?.messageClass) {
+        return { ...base, status: 'missing' };
+      }
+      const system = state.messageClass as ParsedMessageClass;
+      if (system.packageName) {
+        base.actualPackage = system.packageName;
+      }
+      if (
+        expectedPackage &&
+        system.packageName &&
+        system.packageName.toUpperCase() !== expectedPackage.toUpperCase()
+      ) {
+        return {
+          ...base,
+          status: 'package-mismatch',
+          message: `Expected package ${expectedPackage}, found ${system.packageName}`,
+        };
+      }
+      const expectedText =
+        expectedSourceBase64 !== undefined
+          ? decodeBase64(expectedSourceBase64)
+          : expectedSource;
+      if (expectedText !== undefined) {
+        const expectedCls = JSON.parse(expectedText) as ParsedMessageClass;
+        if (
+          canonicalizeMessageClass(system) !==
+          canonicalizeMessageClass(expectedCls)
+        ) {
+          return {
+            ...base,
+            status: 'source-mismatch',
+            message: 'Message class content differs from backup',
+          };
+        }
+      }
+      return base;
+    }
+
     // 1. Try to get metadata first (works for almost everything)
     const metadataXml = await readMetadataXmlForType(
       client,
