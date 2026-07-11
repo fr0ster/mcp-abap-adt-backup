@@ -143,5 +143,51 @@ console.log('OK task1');
     messages: [{ msgno: '001', msgtext: 'a' }, { msgno: '002', msgtext: 'b' }] });
   assert.notStrictEqual(a, d, 'canonical form reflects class description changes');
 
+  // --- post-create transient lock retry ---
+  // First message upsert fails twice with the EU510 "currently editing" 403,
+  // then succeeds — restoreMessageClass must retry, not abort.
+  function fakeFlakyClient(failFirstN) {
+    let fails = failFirstN;
+    const calls = { create: 0, msgUpsert: [] };
+    return {
+      calls,
+      getMessageClass() {
+        return { async create() { calls.create++; }, async update() {},
+          async read() { return { messageClass: { messages: [] } }; } };
+      },
+      getMessageClassMessage() {
+        return {
+          async update(cfg) {
+            if (fails > 0) {
+              fails--;
+              const err = new Error('Request failed with status code 403');
+              err.response = { data: '<exc:exception>...EU510...currently editing...' };
+              throw err;
+            }
+            calls.msgUpsert.push(cfg.msgno);
+          },
+          async delete() {},
+        };
+      },
+    };
+  }
+  const flaky = fakeFlakyClient(2);
+  await restoreMessageClass(flaky, parsed, {
+    mode: 'create', name: 'ZMY_MSG', description: 'd', packageName: 'ZPKG',
+    retryDelayMs: 1, retryAttempts: 6,
+  });
+  assert.deepStrictEqual(flaky.calls.msgUpsert.sort(), ['001', '002'], 'retries transient lock then upserts');
+
+  // A non-transient error must NOT be retried — it propagates.
+  const hardFail = {
+    getMessageClass() { return { async create() {}, async update() {}, async read() { return { messageClass: { messages: [] } }; } }; },
+    getMessageClassMessage() { return { async update() { throw new Error('boom 500'); }, async delete() {} }; },
+  };
+  let threw = false;
+  try {
+    await restoreMessageClass(hardFail, parsed, { mode: 'create', name: 'Z', retryDelayMs: 1 });
+  } catch (e) { threw = /boom 500/.test(e.message); }
+  assert.ok(threw, 'non-transient error propagates without retry');
+
   console.log('OK task6');
 })().catch((e) => { console.error(e); process.exit(1); });
