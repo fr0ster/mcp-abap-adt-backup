@@ -117,7 +117,10 @@ async function withEditableRetry<T>(
 
 /**
  * True when the error is the transient "class just created, not yet editable"
- * signal: EU510 "currently editing" / ExceptionResourceNoAccess / HTTP 403.
+ * signal. Matches the SAP edit-lock markers (EU510 / ExceptionResourceNoAccess /
+ * "currently editing") only — a bare HTTP 403 without these markers is a real
+ * authorization failure and must NOT be retried (it would waste the whole retry
+ * window and end with a misleading "not yet editable" message).
  */
 function isTransientEditLock(error: unknown): boolean {
   const parts: string[] = [];
@@ -129,9 +132,7 @@ function isTransientEditLock(error: unknown): boolean {
     parts.push(typeof data === 'string' ? data : JSON.stringify(data));
   }
   const haystack = parts.join(' ');
-  return /EU510|ResourceNoAccess|currently editing|status code 403/i.test(
-    haystack,
-  );
+  return /EU510|ResourceNoAccess|currently editing/i.test(haystack);
 }
 
 function delay(ms: number): Promise<void> {

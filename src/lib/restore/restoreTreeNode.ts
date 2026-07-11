@@ -547,7 +547,9 @@ export async function restoreTreeNode(
       }
       case 'messageClass': {
         if (!payload) {
-          return;
+          throw new Error(
+            `messageClass ${node.name}: missing payload (cannot restore)`,
+          );
         }
         const parsed = JSON.parse(payload) as ParsedMessageClass;
         await restoreMessageClass(client, parsed, {
