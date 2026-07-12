@@ -27,8 +27,8 @@ adt-backup backup --package ZPKG_TEST --output backup.yaml --destination TRIAL
 # Verify (source-only by default)
 adt-backup verify --input backup.yaml --destination TRIAL
 
-# Diff a single object against the system
-adt-backup diff --input backup.yaml --object messageClass:ZMY_MSG --destination TRIAL
+# Diff (all objects, or a single --object)
+adt-backup diff --input backup.yaml --all --destination TRIAL
 
 # Restore (new objects and updates activate by default)
 adt-backup restore --input backup.yaml --mode upsert --destination TRIAL

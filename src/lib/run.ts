@@ -41,6 +41,7 @@ import type {
   BackupObject,
   BackupTreeFile,
   BackupTreeNode,
+  ObjectSpec,
   RestoreMode,
   RestorePlan,
   RestorePlanGroup,
@@ -49,6 +50,7 @@ import type {
 import { diffUnified } from './utils/diffUnified';
 import { formatObjectSpec } from './utils/formatObjectSpec';
 import { parseObjectSpec } from './utils/parseObjectSpec';
+import { collectBackupNodes } from './verify/collectBackupNodes';
 import { formatVerifyResultsText } from './verify/formatVerifyResultsText';
 import { verifyBackup } from './verify/verifyBackup';
 import { extractMetadata } from './xml/extractMetadata';
@@ -682,54 +684,56 @@ export async function run(): Promise<void> {
       return true;
     };
 
+    // Diff a single tree node against the system (messageClass → canonical
+    // content compare; xml → metadata compare; source → unified source diff).
+    const diffNode = async (node: BackupTreeNode): Promise<void> => {
+      if (!node.type || !node.codeBase64) return;
+      const spec: ObjectSpec = {
+        type: node.type,
+        name: node.name,
+        functionGroupName: node.functionGroupName,
+      };
+      const label = formatObjectSpec(spec);
+      const backupText = decodeBase64(node.codeBase64);
+      if (node.type === 'messageClass') {
+        const state = await client.getMessageClass().read({ name: node.name });
+        const backupCanon = canonicalizeMessageClass(
+          JSON.parse(backupText) as ParsedMessageClass,
+        );
+        const systemCanon = state?.messageClass
+          ? canonicalizeMessageClass(state.messageClass as ParsedMessageClass)
+          : '';
+        await diffSource(label, backupCanon, systemCanon, true);
+      } else if (node.codeFormat === 'xml') {
+        const metadataXml = await readMetadataXmlForType(
+          client,
+          node.type,
+          node.name,
+          node.functionGroupName,
+        );
+        if (metadataXml)
+          await diffMetadata(label, backupText, metadataXml, true);
+      } else {
+        const actualSource = await readSourceText(client, spec);
+        await diffSource(label, backupText, actualSource ?? '', true);
+      }
+    };
+
     if (parsed.schemaVersion === 2) {
       verifyTreeChecksums(parsed.root);
-      if (!diffAll) {
+      if (diffAll) {
+        const nodes: BackupTreeNode[] = [];
+        collectBackupNodes(parsed.root, nodes);
+        for (const node of nodes) {
+          if (node.codeBase64) await diffNode(node);
+        }
+      } else {
         const spec = parseObjectSpec(objectSpecValue);
         const node = findNodeInTree(parsed.root, spec);
         if (!node || !node.codeBase64) throw new Error('Object not found');
-        const backupText = decodeBase64(node.codeBase64);
-        if (node.type === 'messageClass') {
-          const state = await client
-            .getMessageClass()
-            .read({ name: node.name });
-          const backupCanon = canonicalizeMessageClass(
-            JSON.parse(backupText) as ParsedMessageClass,
-          );
-          const systemCanon = state?.messageClass
-            ? canonicalizeMessageClass(state.messageClass as ParsedMessageClass)
-            : '';
-          await diffSource(
-            formatObjectSpec(spec),
-            backupCanon,
-            systemCanon,
-            true,
-          );
-        } else if (node.codeFormat === 'xml') {
-          const metadataXml = await readMetadataXmlForType(
-            client,
-            node.type!,
-            node.name,
-            node.functionGroupName,
-          );
-          if (metadataXml)
-            await diffMetadata(
-              formatObjectSpec(spec),
-              backupText,
-              metadataXml,
-              true,
-            );
-        } else {
-          const actualSource = await readSourceText(client, spec);
-          await diffSource(
-            formatObjectSpec(spec),
-            backupText,
-            actualSource ?? '',
-            true,
-          );
-        }
-        return;
+        await diffNode(node);
       }
+      return;
     }
     return;
   }
