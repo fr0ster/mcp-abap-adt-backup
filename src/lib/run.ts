@@ -641,7 +641,7 @@ export async function run(): Promise<void> {
     const input = args.input;
     const objectSpec = args.object;
     const diffAll = Boolean(args.all);
-    const _showOk = Boolean(args['show-ok']);
+    const showOk = Boolean(args['show-ok']);
     const objectSpecValue = typeof objectSpec === 'string' ? objectSpec : '';
     if (typeof input !== 'string') throw new Error('Missing --input');
     if (!diffAll && typeof objectSpec !== 'string')
@@ -703,7 +703,7 @@ export async function run(): Promise<void> {
         const systemCanon = state?.messageClass
           ? canonicalizeMessageClass(state.messageClass as ParsedMessageClass)
           : '';
-        await diffSource(label, backupCanon, systemCanon, true);
+        await diffSource(label, backupCanon, systemCanon, showOk);
       } else if (node.codeFormat === 'xml') {
         const metadataXml = await readMetadataXmlForType(
           client,
@@ -712,10 +712,10 @@ export async function run(): Promise<void> {
           node.functionGroupName,
         );
         if (metadataXml)
-          await diffMetadata(label, backupText, metadataXml, true);
+          await diffMetadata(label, backupText, metadataXml, showOk);
       } else {
         const actualSource = await readSourceText(client, spec);
-        await diffSource(label, backupText, actualSource ?? '', true);
+        await diffSource(label, backupText, actualSource ?? '', showOk);
       }
     };
 
