@@ -4,12 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-07-14
+
 ### Added
 - Message class (`MSAG`) backup/restore/verify/diff support. Class and its messages are one atomic backup unit (JSON payload); restore creates the shell, upserts messages, and reconciles (deletes target-only messages). Not activatable; restored early with no co-activation.
   - Some systems (e.g. BTP ABAP trial) register a newly created message class asynchronously, so its messages are not immediately editable (`LOCK_MSG` → 403 EU510) for a few minutes. Restore retries the message upsert with backoff to give the system time; if the object is still not editable when the window is exhausted, the shell remains and re-running restore later (idempotent) populates the messages.
 
 ### Changed
 - Bump `@mcp-abap-adt/adt-clients` to `^7.3.1` (adds message-class module).
+
+### Fixed
+- `diff --all` now actually compares every object in a schemaVersion-2 (tree/package) backup by walking the tree nodes; previously it returned without diffing anything.
+- `diff` honors `--show-ok`: unchanged objects print `No differences` only when `--show-ok` is set, keeping large `--all` runs readable.
 
 ## [1.6.2] - 2026-07-01
 
