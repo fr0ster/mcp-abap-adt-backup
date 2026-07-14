@@ -149,3 +149,11 @@ objectTypes:
     restore:
       status: implemented
       note: "Restored as CDS test class in system"
+  messageClass:
+    backup:
+      status: implemented
+      payload: json
+      note: "MSAG/N; class and its messages backed up as one atomic JSON unit (parsed, not raw XML)"
+    restore:
+      status: implemented
+      note: "Not activatable; restored early (no co-activation) via shell-create + per-message upsert + reconcile (deletes target-only messages)"

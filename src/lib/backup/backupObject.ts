@@ -295,6 +295,30 @@ export async function backupObject(
         source: source ?? undefined,
       };
     }
+    case 'messageClass': {
+      const state = await client.getMessageClass().read({ name: spec.name });
+      if (!state?.messageClass) {
+        throw new Error(`Message class not found: ${spec.name}`);
+      }
+      const mc = state.messageClass;
+      const config = applyConfigName(
+        spec.type,
+        spec.name,
+        spec.functionGroupName,
+        {
+          name: spec.name,
+          packageName: mc.packageName,
+          description: mc.description,
+        } as BackupConfig,
+      );
+      return {
+        id,
+        type: spec.type,
+        name: spec.name,
+        config,
+        source: JSON.stringify(mc),
+      };
+    }
     default: {
       const basic = await readBasicMetadata(client, spec);
       const source = await readSourceText(client, spec);

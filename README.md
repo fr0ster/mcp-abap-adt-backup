@@ -27,7 +27,7 @@ adt-backup backup --package ZPKG_TEST --output backup.yaml --destination TRIAL
 # Verify (source-only by default)
 adt-backup verify --input backup.yaml --destination TRIAL
 
-# Diff (all objects)
+# Diff (all objects, or a single --object)
 adt-backup diff --input backup.yaml --all --destination TRIAL
 
 # Restore (new objects and updates activate by default)
@@ -91,12 +91,15 @@ See `docs/roadmap.yaml` for per-object backup/restore status and the plan for re
 | `enhancement` | implemented | implemented | source |
 | `unitTest` | implemented | implemented | as class |
 | `cdsUnitTest` | implemented | implemented | as class |
+| `messageClass` | implemented | implemented | json |
 
 > **Note**: Unit tests are stored as classes in backups. When restoring, they are created as test classes in the system.
 
 > **Note**: For `transformation`, the subtype (`SimpleTransformation` for `XSLT/VT` vs `XSLTProgram` for `XSLT/ST`) is detected from the source header (`<?sap.transform simple?>`).
 
 > **Note**: For `serviceBinding`, the publication state (`srvb:published`) is preserved in the backup and re-applied during restore — published bindings are re-published, unpublished bindings are unpublished.
+
+> **Note**: For Message Classes (`MSAG`), the class and its messages are backed up as one atomic JSON unit (parsed, not raw XML). Restore creates the class shell, upserts each message, and reconciles by deleting target-only messages. Message classes are not activatable and are restored early, with no co-activation.
 
 ## Smoke Checklist
 

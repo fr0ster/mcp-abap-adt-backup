@@ -27,6 +27,8 @@ import type {
 } from '@mcp-abap-adt/adt-clients';
 import { logVerbose } from '../cli/logVerbose';
 import { decodeBase64 } from '../crypto/decodeBase64';
+import { restoreMessageClass } from '../messageClass/restoreMessageClass';
+import type { ParsedMessageClass } from '../messageClass/types';
 import type { BackupTreeNode, RestoreMode } from '../types';
 import { asConfig } from '../utils/asConfig';
 import { detectTransformationType } from '../utils/detectTransformationType';
@@ -541,6 +543,23 @@ export async function restoreTreeNode(
             options,
           );
         }
+        return;
+      }
+      case 'messageClass': {
+        if (!payload) {
+          throw new Error(
+            `messageClass ${node.name}: missing payload (cannot restore)`,
+          );
+        }
+        const parsed = JSON.parse(payload) as ParsedMessageClass;
+        await restoreMessageClass(client, parsed, {
+          mode,
+          name: node.name,
+          description: parsed.description ?? node.description,
+          packageName:
+            parsed.packageName ?? (config.packageName as string | undefined),
+          transportRequest,
+        });
         return;
       }
     }

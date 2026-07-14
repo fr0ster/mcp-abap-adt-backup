@@ -24,6 +24,8 @@ import type {
   ITableTypeConfig,
   ITransformationConfig,
 } from '@mcp-abap-adt/adt-clients';
+import { restoreMessageClass } from '../messageClass/restoreMessageClass';
+import type { ParsedMessageClass } from '../messageClass/types';
 import type { BackupObject, RestoreMode } from '../types';
 import { applyConfigName } from '../utils/applyConfigName';
 import { asConfig } from '../utils/asConfig';
@@ -424,6 +426,24 @@ export async function restoreObject(
           options,
         );
       }
+      return;
+    }
+    case 'messageClass': {
+      if (!obj.source) {
+        throw new Error(
+          `messageClass ${obj.name}: missing payload (cannot restore)`,
+        );
+      }
+      const parsed = JSON.parse(obj.source) as ParsedMessageClass;
+      await restoreMessageClass(client, parsed, {
+        mode,
+        name: obj.name,
+        description:
+          parsed.description ?? (config.description as string | undefined),
+        packageName:
+          parsed.packageName ?? (config.packageName as string | undefined),
+        transportRequest,
+      });
       return;
     }
   }

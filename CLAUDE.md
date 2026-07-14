@@ -66,6 +66,8 @@ Objects store their payload in one of two formats (see `docs/roadmap.yaml` for w
 
 The format is tracked per node in `codeFormat` and determines how backup/restore/diff operations handle the content.
 
+Message classes (`messageClass`, `MSAG/N`) are the exception: they store parsed JSON (not raw XML — the `adt-clients` XML parser is not importable) covering the class and all of its messages as one atomic backup unit. Restore is not activatable and works by shell-create + per-message upsert + reconcile (deletes target-only messages).
+
 ### ADT Type Mapping
 
 `mapAdtTypeToSupported.ts` converts ADT type strings (e.g., `CLAS/OC`, `TABL/DT`, `FUGR/FF`) to internal `SupportedType` values. This mapping is central to how the tool discovers and categorizes objects from the SAP system.
@@ -86,7 +88,7 @@ The format is tracked per node in `codeFormat` and determines how backup/restore
 
 ### Key Types (`src/lib/types.ts`)
 
-- `SupportedType` — Union of ~25 supported ABAP object types (incl. `transformation` for XSLT/ST and SimpleTransformation, `scalarFunction`/`scalarFunctionImplementation` for CDS scalar functions, `appendStructure`, and `ddl` for CDS views & table functions)
+- `SupportedType` — Union of ~25 supported ABAP object types (incl. `transformation` for XSLT/ST and SimpleTransformation, `scalarFunction`/`scalarFunctionImplementation` for CDS scalar functions, `appendStructure`, `ddl` for CDS views & table functions, and `messageClass` for MSAG message classes)
 - `BackupFile` / `BackupTreeFile` — The two backup formats
 - `BackupTreeNode` — Tree node with optional `codeBase64`, `config`, `children`, `codeFormat`, `usedBy`
 - `RestorePlan` / `RestorePlanGroup` / `RestorePlanAction` — Restore execution plan

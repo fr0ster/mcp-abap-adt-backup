@@ -290,6 +290,7 @@ export function analyzeDependencies(nodes: BackupTreeNode[]): RestoreGroup[] {
 const TYPE_CREATION_ORDER: Record<string, number> = {
   domain: 0,
   dataElement: 1,
+  messageClass: 1,
   structure: 2,
   table: 2,
   tableType: 2,

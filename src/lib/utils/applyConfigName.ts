@@ -82,6 +82,9 @@ export function applyConfigName(
     case 'appendStructure':
       finalConfig.appendStructureName = name;
       break;
+    case 'messageClass':
+      finalConfig.name = name;
+      break;
     case 'unitTest':
       finalConfig.className = name;
       break;

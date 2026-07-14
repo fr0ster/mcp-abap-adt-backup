@@ -44,6 +44,7 @@ export function mapAdtTypeToSupported(
     'BIMP/BO': 'behaviorImplementation',
     'ENHO/ENH': 'enhancement',
     'DCLS/DL': 'accessControl',
+    'MSAG/N': 'messageClass',
   };
 
   // Skip the exact-map entry for TABL/DS when the append hint is set,
@@ -79,6 +80,7 @@ export function mapAdtTypeToSupported(
     return 'behaviorImplementation';
   if (normalized.startsWith('ENHO/')) return 'enhancement';
   if (normalized.startsWith('DCLS/')) return 'accessControl';
+  if (normalized.startsWith('MSAG/')) return 'messageClass';
 
   return undefined;
 }

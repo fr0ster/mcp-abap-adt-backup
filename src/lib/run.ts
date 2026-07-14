@@ -25,7 +25,10 @@ import { updateTreeChecksums } from './crypto/updateTreeChecksums';
 import { verifyBackupChecksum } from './crypto/verifyBackupChecksum';
 import { verifyTreeChecksums } from './crypto/verifyTreeChecksums';
 import { collectTreeDependencies } from './dependencies/collectTreeDependencies';
+import { canonicalizeMessageClass } from './messageClass/canonicalizeMessageClass';
+import type { ParsedMessageClass } from './messageClass/types';
 import { analyzeDependencyLevels } from './restore/analyzeDependencies';
+import { isActivatable } from './restore/isActivatable';
 import { restoreTreeBackup } from './restore/restoreTreeBackup';
 import { verbosityState } from './state/verbosity';
 import { buildPackageBackupTree } from './tree/buildPackageBackupTree';
@@ -38,6 +41,7 @@ import type {
   BackupObject,
   BackupTreeFile,
   BackupTreeNode,
+  ObjectSpec,
   RestoreMode,
   RestorePlan,
   RestorePlanGroup,
@@ -46,6 +50,7 @@ import type {
 import { diffUnified } from './utils/diffUnified';
 import { formatObjectSpec } from './utils/formatObjectSpec';
 import { parseObjectSpec } from './utils/parseObjectSpec';
+import { collectBackupNodes } from './verify/collectBackupNodes';
 import { formatVerifyResultsText } from './verify/formatVerifyResultsText';
 import { verifyBackup } from './verify/verifyBackup';
 import { extractMetadata } from './xml/extractMetadata';
@@ -539,7 +544,12 @@ export async function run(): Promise<void> {
     for (const group of plan.groups) {
       const groupRefs: ObjectReference[] = [];
       for (const action of group.actions) {
-        if (action.type === 'package' || !action.adtType) continue;
+        if (
+          action.type === 'package' ||
+          !action.adtType ||
+          !isActivatable(action.type)
+        )
+          continue;
         const key = `${action.adtType}:${action.name}`.toUpperCase();
         if (inactiveSet.has(key)) {
           groupRefs.push({ name: action.name, type: action.adtType });
@@ -631,7 +641,7 @@ export async function run(): Promise<void> {
     const input = args.input;
     const objectSpec = args.object;
     const diffAll = Boolean(args.all);
-    const _showOk = Boolean(args['show-ok']);
+    const showOk = Boolean(args['show-ok']);
     const objectSpecValue = typeof objectSpec === 'string' ? objectSpec : '';
     if (typeof input !== 'string') throw new Error('Missing --input');
     if (!diffAll && typeof objectSpec !== 'string')
@@ -674,38 +684,56 @@ export async function run(): Promise<void> {
       return true;
     };
 
+    // Diff a single tree node against the system (messageClass → canonical
+    // content compare; xml → metadata compare; source → unified source diff).
+    const diffNode = async (node: BackupTreeNode): Promise<void> => {
+      if (!node.type || !node.codeBase64) return;
+      const spec: ObjectSpec = {
+        type: node.type,
+        name: node.name,
+        functionGroupName: node.functionGroupName,
+      };
+      const label = formatObjectSpec(spec);
+      const backupText = decodeBase64(node.codeBase64);
+      if (node.type === 'messageClass') {
+        const state = await client.getMessageClass().read({ name: node.name });
+        const backupCanon = canonicalizeMessageClass(
+          JSON.parse(backupText) as ParsedMessageClass,
+        );
+        const systemCanon = state?.messageClass
+          ? canonicalizeMessageClass(state.messageClass as ParsedMessageClass)
+          : '';
+        await diffSource(label, backupCanon, systemCanon, showOk);
+      } else if (node.codeFormat === 'xml') {
+        const metadataXml = await readMetadataXmlForType(
+          client,
+          node.type,
+          node.name,
+          node.functionGroupName,
+        );
+        if (metadataXml)
+          await diffMetadata(label, backupText, metadataXml, showOk);
+      } else {
+        const actualSource = await readSourceText(client, spec);
+        await diffSource(label, backupText, actualSource ?? '', showOk);
+      }
+    };
+
     if (parsed.schemaVersion === 2) {
       verifyTreeChecksums(parsed.root);
-      if (!diffAll) {
+      if (diffAll) {
+        const nodes: BackupTreeNode[] = [];
+        collectBackupNodes(parsed.root, nodes);
+        for (const node of nodes) {
+          if (node.codeBase64) await diffNode(node);
+        }
+      } else {
         const spec = parseObjectSpec(objectSpecValue);
         const node = findNodeInTree(parsed.root, spec);
         if (!node || !node.codeBase64) throw new Error('Object not found');
-        const backupText = decodeBase64(node.codeBase64);
-        if (node.codeFormat === 'xml') {
-          const metadataXml = await readMetadataXmlForType(
-            client,
-            node.type!,
-            node.name,
-            node.functionGroupName,
-          );
-          if (metadataXml)
-            await diffMetadata(
-              formatObjectSpec(spec),
-              backupText,
-              metadataXml,
-              true,
-            );
-        } else {
-          const actualSource = await readSourceText(client, spec);
-          await diffSource(
-            formatObjectSpec(spec),
-            backupText,
-            actualSource ?? '',
-            true,
-          );
-        }
-        return;
+        await diffNode(node);
       }
+      return;
     }
     return;
   }

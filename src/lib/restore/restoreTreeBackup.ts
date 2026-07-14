@@ -10,6 +10,7 @@ import type {
   SupportedType,
 } from '../types';
 import { analyzeDependencies } from './analyzeDependencies';
+import { isActivatable } from './isActivatable';
 import { restoreTreeNode } from './restoreTreeNode';
 
 const xmlParser = new XMLParser({
@@ -33,6 +34,11 @@ interface RestorePhase {
 const RESTORE_PHASES: RestorePhase[] = [
   { name: 'Domains', types: ['domain'], activation: 'individual' },
   { name: 'Data Elements', types: ['dataElement'], activation: 'individual' },
+  {
+    name: 'Message Classes',
+    types: ['messageClass'],
+    activation: 'individual',
+  },
   { name: 'Structures', types: ['structure'], activation: 'individual' },
   { name: 'Tables', types: ['table'], activation: 'individual' },
   {
@@ -267,7 +273,7 @@ export async function restoreTreeBackup(
         undefined,
         transportLayer,
       );
-      if (shouldActivate && node.adtType) {
+      if (shouldActivate && node.adtType && isActivatable(node.type)) {
         return { name: node.name, type: node.adtType };
       }
     } catch (error) {

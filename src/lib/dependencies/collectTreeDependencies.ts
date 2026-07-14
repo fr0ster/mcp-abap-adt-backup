@@ -11,6 +11,7 @@ const WHERE_USED_TYPE_MAP: Partial<Record<SupportedType, string>> = {
   package: 'DEVC/K',
   domain: 'DOMA/DD',
   dataElement: 'DTEL/DE',
+  messageClass: 'MSAG/N',
   structure: 'STRU/DT',
   appendStructure: 'TABL/DS',
   table: 'TABL/DT',
