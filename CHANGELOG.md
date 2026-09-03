@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-09-03
+
 ### Licence
 
 - **This tool is now `GPL-3.0-only`.** It was MIT up to and including 1.7.0, and
