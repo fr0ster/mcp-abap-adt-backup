@@ -21,7 +21,7 @@
     "mcp"
   ],
   "author": "Oleksii Kyslytsia <oleksij.kyslytsja@gmail.com>",
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "homepage": "https://github.com/fr0ster/mcp-abap-adt-backup#readme",
   "bugs": {
     "url": "https://github.com/fr0ster/mcp-abap-adt-backup/issues"

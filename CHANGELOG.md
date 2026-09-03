@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Licence
+
+- **This tool is now `GPL-3.0-only`.** It was MIT up to and including 1.7.0, and
+  those versions stay MIT — a licence change is not retroactive.
+
+  A finished tool rather than a library to build on, so it takes the full GPL
+  rather than the LGPL its own dependencies carry: running it and using it on your
+  own data carries no conditions, while distributing it — or a modified version —
+  means passing on the same freedoms, source included.
+
+  Copyright © 2025 Oleksii Kyslytsia.
+
+
 ## [1.7.0] - 2026-07-14
 
 ### Added
