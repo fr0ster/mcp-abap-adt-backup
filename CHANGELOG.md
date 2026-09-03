@@ -14,7 +14,7 @@ All notable changes to this project will be documented in this file.
   own data carries no conditions, while distributing it — or a modified version —
   means passing on the same freedoms, source included.
 
-  Copyright © 2025 Oleksii Kyslytsia.
+  Copyright © 2025–2026 Oleksii Kyslytsia.
 
 
 ## [1.7.0] - 2026-07-14
