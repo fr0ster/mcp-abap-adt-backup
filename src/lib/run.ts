@@ -58,7 +58,6 @@ import type {
   RestoreMode,
   RestorePlan,
   RestorePlanGroup,
-  SupportedType,
 } from './types';
 import { diffUnified } from './utils/diffUnified';
 import { formatObjectSpec } from './utils/formatObjectSpec';

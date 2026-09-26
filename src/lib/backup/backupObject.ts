@@ -1,6 +1,6 @@
 import type { AdtClient } from '@mcp-abap-adt/adt-clients';
 import { readMessageClass } from '../messageClass/readMessageClass';
-import type { BackupConfig, BackupObject, ObjectSpec } from '../types';
+import type { BackupObject, ObjectSpec } from '../types';
 import { applyConfigName } from '../utils/applyConfigName';
 import { objectId } from '../utils/objectId';
 import { parseBehaviorDefinitionFromClass } from '../utils/parseBehaviorDefinitionFromClass';

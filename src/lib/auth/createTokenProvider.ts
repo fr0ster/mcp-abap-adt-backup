@@ -31,8 +31,7 @@ export function createTokenProviderFactory(
 ): TokenProviderFactory {
   return (_destination, authConfig, connConfig): IRefreshableTokenProvider => {
     if (
-      !authConfig ||
-      !authConfig.uaaUrl ||
+      !authConfig?.uaaUrl ||
       !authConfig.uaaClientId ||
       !authConfig.uaaClientSecret
     ) {
