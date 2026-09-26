@@ -4,6 +4,7 @@ const commonOptions = [
   '  --target <name>           Alias for --destination',
   '  --env <file>              Path to .env file for target system',
   '  --env-path <file>         Alias for --env',
+  '  --system-type <type>      cloud | onprem | legacy (or SAP_SYSTEM_TYPE); required to connect',
   '  --auth-root <path>        Root folder with auth configs',
   '  --mcp                     Enable MCP-compatible mode',
   '  --browser-auth-port <port> Port for OAuth callback server (default: 10001)',

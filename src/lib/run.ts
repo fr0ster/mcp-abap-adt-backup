@@ -1,10 +1,10 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { IObjectReference } from '@mcp-abap-adt/interfaces-adt';
 import { AdtClient, getSystemInformation } from '@mcp-abap-adt/adt-clients';
-import { createAbapConnection } from '@mcp-abap-adt/connection';
+import type { IObjectReference } from '@mcp-abap-adt/interfaces-adt';
 import { XMLParser } from 'fast-xml-parser';
 import YAML from 'yaml';
+import { DEFAULT_BROWSER_AUTH_PORT } from './auth/createTokenProvider';
 import { getSapConfigFromBroker } from './auth/getSapConfigFromBroker';
 import { backupObject } from './backup/backupObject';
 import { readMetadataXmlForType } from './backup/readMetadataXmlForType';
@@ -17,6 +17,12 @@ import { parseArgs } from './cli/parseArgs';
 import { shouldEnableAdtLogger } from './cli/shouldEnableAdtLogger';
 import { shouldEnableConnectionLogger } from './cli/shouldEnableConnectionLogger';
 import { usage } from './cli/usage';
+import {
+  type AdtConnection,
+  closeConnection,
+  createConnection,
+  resolveSystemType,
+} from './connection/createConnection';
 import { computeBackupChecksum } from './crypto/computeBackupChecksum';
 import { computeCodeChecksum } from './crypto/computeCodeChecksum';
 import { decodeBase64 } from './crypto/decodeBase64';
@@ -133,6 +139,7 @@ export async function run(): Promise<void> {
   const canUseAuth = command === 'plan';
 
   let client: AdtClient | undefined;
+  let connection: AdtConnection | undefined;
 
   if (needsAuth || (canUseAuth && (envPath || destination))) {
     if (needsAuth && !envPath && !destination) {
@@ -152,9 +159,15 @@ export async function run(): Promise<void> {
         browserAuthPort:
           typeof args['browser-auth-port'] === 'string'
             ? Number.parseInt(args['browser-auth-port'], 10)
-            : 10001,
+            : DEFAULT_BROWSER_AUTH_PORT,
         logger,
       });
+      // After the broker: an --env file may be what states it.
+      const systemType = resolveSystemType(
+        typeof args['system-type'] === 'string'
+          ? args['system-type']
+          : undefined,
+      );
 
       const allowAdtLogs =
         verbosityState.level >= 3 || Boolean(args['debug-adt']);
@@ -172,26 +185,46 @@ export async function run(): Promise<void> {
           ? logger
           : undefined;
 
-      const connection = createAbapConnection(
+      connection = createConnection(
         sapAuth.config,
-        connectionLogger,
-        undefined,
+        systemType,
         sapAuth.tokenRefresher,
+        connectionLogger,
       );
-      // Resolve masterSystem/responsible for AdtClient:
-      // Cloud (BTP): both from getSystemInformation endpoint
-      // On-premise: responsible from connection username, no masterSystem
-      const systemInfo = await getSystemInformation(connection);
-      const masterSystem = systemInfo?.systemID;
-      const responsible = systemInfo?.userName || sapAuth.config.username;
+      await connection.connect();
+      try {
+        // masterSystem/responsible for created objects. The system answers
+        // both where it offers the endpoint; otherwise the logon user is the
+        // responsible person, upper-cased as the user master stores it.
+        const systemInfo = await getSystemInformation(connection);
+        const masterSystem = systemInfo?.systemID;
+        const responsible =
+          systemInfo?.userName || sapAuth.config.username?.toUpperCase();
 
-      client = new AdtClient(connection, adtLogger, {
-        masterSystem,
-        responsible,
-      });
+        client = new AdtClient(connection, adtLogger, {
+          masterSystem,
+          responsible,
+        });
+      } catch (error) {
+        await closeConnection(connection);
+        throw error;
+      }
     }
   }
 
+  try {
+    await dispatch(command, args, client, destination);
+  } finally {
+    if (connection) await closeConnection(connection);
+  }
+}
+
+async function dispatch(
+  command: string,
+  args: Record<string, string | boolean | number>,
+  client: AdtClient | undefined,
+  destination: string | undefined,
+): Promise<void> {
   if (command === 'tree') {
     if (!client) throw new Error('Client required');
     const packageName =
