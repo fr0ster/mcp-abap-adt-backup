@@ -1,6 +1,5 @@
-import type { AdtClient } from '@mcp-abap-adt/adt-clients';
 import type { IObjectReference } from '@mcp-abap-adt/interfaces-adt';
-import { XMLParser } from 'fast-xml-parser';
+import { AdtCallError } from '../adt/answer';
 import type { RestoreTarget } from '../adt/RestoreTarget';
 import { logVerbose } from '../cli/logVerbose';
 import { flattenTree } from '../tree/flattenTree';
@@ -11,15 +10,10 @@ import type {
   RestorePlanGroup,
   SupportedType,
 } from '../types';
+import { activateGroup, findInactive } from './activateGroup';
 import { analyzeDependencies } from './analyzeDependencies';
 import { isActivatable } from './isActivatable';
 import { writeObject } from './writeObject';
-
-const xmlParser = new XMLParser({
-  ignoreAttributes: false,
-  attributeNamePrefix: '@_',
-  parseAttributeValue: false,
-});
 
 /**
  * Per-type activation strategy:
@@ -145,24 +139,28 @@ export async function restoreTreeBackup(
 
   const failures: { node: BackupTreeNode; error: string }[] = [];
 
-  // Helper: check which of our refs are still inactive
-  const findInactiveRefs = async (
-    refs: IObjectReference[],
-  ): Promise<IObjectReference[]> => {
-    const result = await client.getUtils().getInactiveObjects();
-    const inactiveSet = new Set(
-      result.objects.map((o) => `${o.type}:${o.name}`.toUpperCase()),
+  const findInactiveRefs = (refs: IObjectReference[]) =>
+    findInactive(client, refs);
+
+  const reportRemaining = (
+    phaseName: string,
+    stillInactive: IObjectReference[],
+  ) => {
+    logVerbose(
+      1,
+      `  [!] WARNING: ${phaseName}: ${stillInactive.length} object(s) remain inactive:`,
     );
-    return refs.filter((r) =>
-      inactiveSet.has(`${r.type}:${r.name}`.toUpperCase()),
-    );
+    for (const ref of stillInactive) {
+      logVerbose(1, `      - ${ref.type}:${ref.name}`);
+    }
   };
 
-  // Helper to bulk activate a list of refs with verification
+  // Activate the refs that are inactive, wait for the run, then read the
+  // inactive list again: that list, not the run's verdict, is what the
+  // summary reports.
   const bulkActivate = async (phaseName: string, refs: IObjectReference[]) => {
     if (refs.length === 0) return;
 
-    // Check which objects are actually inactive
     const toActivate = await findInactiveRefs(refs);
     if (toActivate.length === 0) {
       logVerbose(
@@ -176,70 +174,16 @@ export async function restoreTreeBackup(
       2,
       `  [*] Bulk activating ${phaseName} (${toActivate.length}/${refs.length} inactive)...`,
     );
-
-    let hasErrors = false;
-    try {
-      const result = await client
-        .getUtils()
-        .activateObjectsGroup(toActivate, true);
-      if (result?.data) {
-        const parsed = xmlParser.parse(
-          typeof result.data === 'string' ? result.data : String(result.data),
-        );
-        const msgs = parsed?.['chkl:messages']?.msg;
-        if (msgs) {
-          const msgArray = Array.isArray(msgs) ? msgs : [msgs];
-          for (const msg of msgArray) {
-            const type = msg['@_type'] || 'info';
-            const text = msg?.shortText?.txt || msg?.shortText || String(msg);
-            if (type === 'E') hasErrors = true;
-            logVerbose(2, `    [${type}] ${text}`);
-          }
-        }
-      }
-    } catch (error) {
-      hasErrors = true;
-      const message = error instanceof Error ? error.message : String(error);
-      logVerbose(2, `  [*] Activation request completed (${message})`);
+    const outcome = await activateGroup(client, toActivate);
+    for (const message of outcome.messages) {
+      logVerbose(outcome.ok ? 2 : 1, `    ${message}`);
     }
 
-    // Verify: poll until our objects are no longer inactive (max 5 retries, 10s apart)
-    // Skip polling if activation returned errors
-    if (hasErrors) {
-      const stillInactive = await findInactiveRefs(refs);
-      if (stillInactive.length > 0) {
-        logVerbose(
-          1,
-          `  [!] WARNING: ${phaseName}: ${stillInactive.length} object(s) remain inactive:`,
-        );
-        for (const ref of stillInactive) {
-          logVerbose(1, `      - ${ref.type}:${ref.name}`);
-        }
-      }
-      return;
-    }
-    const maxRetries = 5;
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      const stillInactive = await findInactiveRefs(refs);
-      if (stillInactive.length === 0) {
-        logVerbose(2, `  [*] ${phaseName}: all objects activated successfully`);
-        return;
-      }
-      if (attempt < maxRetries) {
-        logVerbose(
-          2,
-          `  [*] ${stillInactive.length} object(s) still inactive, waiting... (${attempt}/${maxRetries})`,
-        );
-        await new Promise((resolve) => setTimeout(resolve, 10000));
-      } else {
-        logVerbose(
-          1,
-          `  [!] WARNING: ${phaseName}: ${stillInactive.length} object(s) remain inactive:`,
-        );
-        for (const ref of stillInactive) {
-          logVerbose(1, `      - ${ref.type}:${ref.name}`);
-        }
-      }
+    const stillInactive = await findInactiveRefs(refs);
+    if (stillInactive.length === 0) {
+      logVerbose(2, `  [*] ${phaseName}: all objects activated successfully`);
+    } else {
+      reportRemaining(phaseName, stillInactive);
     }
   };
 
@@ -278,8 +222,10 @@ export async function restoreTreeBackup(
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (message.includes('status code 403')) {
-        logVerbose(1, `  [SKIP] ${node.type}:${node.name} — no authorization`);
+      if (error instanceof AdtCallError && error.status === 403) {
+        // Refused, typically for want of authorization on this type — or a
+        // lock another session holds; SAP's text says which.
+        logVerbose(1, `  [SKIP] ${node.type}:${node.name} — ${message}`);
       } else {
         logVerbose(1, `  [FAIL] ${node.type}:${node.name} — ${message}`);
         failures.push({ node, error: message });
@@ -473,11 +419,9 @@ export async function restoreTreeBackup(
         1,
         `[FINAL] ${stillInactive.length} object(s) still inactive, activating...`,
       );
-      try {
-        await client.getUtils().activateObjectsGroup(stillInactive, true);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        logVerbose(2, `  [*] Final activation request completed (${message})`);
+      const outcome = await activateGroup(client, stillInactive);
+      for (const message of outcome.messages) {
+        logVerbose(outcome.ok ? 2 : 1, `    ${message}`);
       }
 
       // Verify final state

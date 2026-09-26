@@ -1,9 +1,13 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { AdtClient, getSystemInformation } from '@mcp-abap-adt/adt-clients';
+import {
+  AdtClient,
+  AdtMessageClassMessage,
+  getSystemInformation,
+} from '@mcp-abap-adt/adt-clients';
 import type { IObjectReference } from '@mcp-abap-adt/interfaces-adt';
-import { XMLParser } from 'fast-xml-parser';
 import YAML from 'yaml';
+import type { RestoreTarget } from './adt/RestoreTarget';
 import { DEFAULT_BROWSER_AUTH_PORT } from './auth/createTokenProvider';
 import { getSapConfigFromBroker } from './auth/getSapConfigFromBroker';
 import { backupObject } from './backup/backupObject';
@@ -34,6 +38,7 @@ import { collectTreeDependencies } from './dependencies/collectTreeDependencies'
 import { canonicalizeMessageClass } from './messageClass/canonicalizeMessageClass';
 import { readMessageClass } from './messageClass/readMessageClass';
 import type { ParsedMessageClass } from './messageClass/types';
+import { activateGroup, findInactive } from './restore/activateGroup';
 import { analyzeDependencyLevels } from './restore/analyzeDependencies';
 import { isActivatable } from './restore/isActivatable';
 import { restoreTreeBackup } from './restore/restoreTreeBackup';
@@ -62,12 +67,6 @@ import { collectBackupNodes } from './verify/collectBackupNodes';
 import { formatVerifyResultsText } from './verify/formatVerifyResultsText';
 import { verifyBackup } from './verify/verifyBackup';
 import { extractMetadata } from './xml/extractMetadata';
-
-const xmlParser = new XMLParser({
-  ignoreAttributes: false,
-  attributeNamePrefix: '@_',
-  parseAttributeValue: false,
-});
 
 export async function run(): Promise<void> {
   const argv = process.argv.slice(2);
@@ -142,6 +141,7 @@ export async function run(): Promise<void> {
 
   let client: AdtClient | undefined;
   let connection: AdtConnection | undefined;
+  let target: RestoreTarget | undefined;
 
   if (needsAuth || (canUseAuth && (envPath || destination))) {
     if (needsAuth && !envPath && !destination) {
@@ -207,6 +207,12 @@ export async function run(): Promise<void> {
           masterSystem,
           responsible,
         });
+        // Message rows are written through the implementation itself: the
+        // factory's contract has no delete, and the restore needs one.
+        target = {
+          client,
+          messages: new AdtMessageClassMessage(connection, adtLogger),
+        };
       } catch (error) {
         await closeConnection(connection);
         throw error;
@@ -215,7 +221,7 @@ export async function run(): Promise<void> {
   }
 
   try {
-    await dispatch(command, args, client, destination);
+    await dispatch(command, args, client, target, destination);
   } finally {
     if (connection) await closeConnection(connection);
   }
@@ -225,6 +231,7 @@ async function dispatch(
   command: string,
   args: Record<string, string | boolean | number>,
   client: AdtClient | undefined,
+  target: RestoreTarget | undefined,
   destination: string | undefined,
 ): Promise<void> {
   if (command === 'tree') {
@@ -464,12 +471,6 @@ async function dispatch(
     const backup = YAML.parse(
       fs.readFileSync(plan.backupFile, 'utf8'),
     ) as BackupTreeFile;
-    const allNodes = flattenTree(backup.root);
-    const _nodeMap = new Map(allNodes.map((n) => [getNodeObjectId(n)!, n]));
-    const _backupPackageNames = new Set(
-      allNodes.filter((n) => n.type === 'package').map((n) => n.name),
-    );
-
     const noActivate = Boolean(args['no-activate']);
     const activate =
       !noActivate && (Boolean(args.activate) || !args['no-activate-on-update']);
@@ -483,8 +484,9 @@ async function dispatch(
         ? args['transport-layer']
         : undefined;
 
+    if (!target) throw new Error('Client required');
     await restoreTreeBackup(
-      client,
+      target,
       backup.root,
       'upsert',
       activate,
@@ -548,13 +550,11 @@ async function dispatch(
     }
 
     // Check which plan objects are actually inactive
-    const inactiveResult = await client.getUtils().getInactiveObjects();
+    const inactiveRefs = await findInactive(client, planRefs);
     const inactiveSet = new Set(
-      inactiveResult.objects.map((o) => `${o.type}:${o.name}`.toUpperCase()),
+      inactiveRefs.map((o) => `${o.type}:${o.name}`.toUpperCase()),
     );
-    const toActivate = planRefs.filter((r) =>
-      inactiveSet.has(`${r.type}:${r.name}`.toUpperCase()),
-    );
+    const toActivate = inactiveRefs;
     const alreadyActive = planRefs.length - toActivate.length;
 
     if (toActivate.length === 0) {
@@ -594,64 +594,21 @@ async function dispatch(
         `  [GROUP ${group.id}] Activating ${groupRefs.length} inactive object(s)...`,
       );
 
-      let hasErrors = false;
-      try {
-        const result = await client
-          .getUtils()
-          .activateObjectsGroup(groupRefs, true);
-        // Parse activation result messages
-        if (result?.data) {
-          const parsed = xmlParser.parse(
-            typeof result.data === 'string' ? result.data : String(result.data),
-          );
-          const msgs = parsed?.['chkl:messages']?.msg;
-          if (msgs) {
-            const msgArray = Array.isArray(msgs) ? msgs : [msgs];
-            for (const msg of msgArray) {
-              const type = msg['@_type'] || 'info';
-              const text = msg?.shortText?.txt || msg?.shortText || String(msg);
-              if (type === 'E') hasErrors = true;
-              logVerbose(2, `    [${type}] ${text}`);
-            }
-          }
-        }
-      } catch (error) {
-        hasErrors = true;
-        const message = error instanceof Error ? error.message : String(error);
-        logVerbose(2, `  [*] Activation request completed (${message})`);
+      // The run is waited for inside activateGroup; the inactive list read
+      // afterwards is what the per-object report states.
+      const outcome = await activateGroup(client, groupRefs);
+      for (const message of outcome.messages) {
+        logVerbose(2, `    ${message}`);
       }
 
-      // Poll until objects are no longer inactive (max 5 retries, 10s apart)
-      // Skip polling if activation returned errors (no point waiting)
-      if (!hasErrors) {
-        const maxRetries = 5;
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-          const postResult = await client.getUtils().getInactiveObjects();
-          const postInactiveSet = new Set(
-            postResult.objects.map((o) => `${o.type}:${o.name}`.toUpperCase()),
-          );
-          const stillInactive = groupRefs.filter((r) =>
-            postInactiveSet.has(`${r.type}:${r.name}`.toUpperCase()),
-          );
-          if (stillInactive.length === 0) break;
-          if (attempt < maxRetries) {
-            logVerbose(
-              2,
-              `  [*] ${stillInactive.length} still inactive, waiting... (${attempt}/${maxRetries})`,
-            );
-            await new Promise((resolve) => setTimeout(resolve, 10000));
-          }
-        }
-      }
-
-      // Report per-object status
-      const finalResult = await client.getUtils().getInactiveObjects();
-      const finalInactiveSet = new Set(
-        finalResult.objects.map((o) => `${o.type}:${o.name}`.toUpperCase()),
+      const stillInactive = new Set(
+        (await findInactive(client, groupRefs)).map((r) =>
+          `${r.type}:${r.name}`.toUpperCase(),
+        ),
       );
       for (const ref of groupRefs) {
         const key = `${ref.type}:${ref.name}`.toUpperCase();
-        if (finalInactiveSet.has(key)) {
+        if (stillInactive.has(key)) {
           logVerbose(2, `    INACTIVE ${ref.type} ${ref.name}`);
           failed++;
         } else {
