@@ -689,7 +689,8 @@ async function dispatch(
         );
         const systemCanon = system ? canonicalizeMessageClass(system) : '';
         await diffSource(label, backupCanon, systemCanon, showOk);
-      } else if (node.codeFormat === 'xml') {
+      } else if (node.codeFormat === 'xml' || node.type === 'tableType') {
+        // A table type is its document, whatever an older backup recorded.
         const metadataXml = await readMetadataXmlForType(
           client,
           node.type,

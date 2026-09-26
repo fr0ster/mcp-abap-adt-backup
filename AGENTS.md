@@ -3,7 +3,7 @@
 ## Project Structure & Module Organization
 - `src/cli/adt-backup.ts` is the primary CLI entry point and contains most orchestration logic.
 - `dist/` is the compiled output (JavaScript + type declarations) produced by the TypeScript build.
-- `scripts/` holds local utilities such as `scripts/dump-adt-xml.js` for debugging ADT payloads.
+- `scripts/` holds local utilities: `delete-package.ts` (delete a package's objects) and `integration-test.mjs`.
 - `docs/roadmap.yaml` tracks supported object types and planned work.
 - `README.md` covers CLI usage, auth flags, and examples.
 
@@ -16,7 +16,7 @@
 - `npm run clean`: remove `dist/` and `tsconfig.tsbuildinfo`.
 
 ## Coding Style & Naming Conventions
-- Language: TypeScript (Node.js >= 18), compiled with `tsconfig.json`.
+- Language: TypeScript (Node.js 22 or 24), compiled with `tsconfig.json`.
 - Formatting/linting: Biome (`biome.json`); run `npm run lint` before committing.
 - Favor explicit, descriptive names (e.g., `backupObject`, `restoreTreeBackup`).
 - CLI commands are lowercase (e.g., `backup`, `restore`); object selectors use `type:name` (e.g., `class:ZCL_TEST`).
@@ -33,5 +33,5 @@
 - PRs should include a clear description, reproducible CLI commands, and any output differences.
 
 ## Security & Configuration Tips
-- Auth flows rely on `@mcp-abap-adt/auth-broker` with `--destination`, `--auth-root`, or `--env`.
+- Auth flows rely on `@mcp-abap-adt/auth-broker` with `--destination`, `--auth-root`, or `--env`; every online command also needs `--system-type cloud|onprem|legacy` (or `SAP_SYSTEM_TYPE`).
 - Never commit auth files (`*.env`, destination JSON, tokens). Keep them local or in secure stores.

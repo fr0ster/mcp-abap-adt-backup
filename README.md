@@ -5,6 +5,8 @@ CLI for recursive ADT backups and restores using `@mcp-abap-adt/adt-clients`.
 
 ## Installation
 
+Requires Node.js 22 or 24.
+
 ```bash
 npm install -g @mcp-abap-adt/adt-backup
 ```
@@ -17,12 +19,20 @@ Options:
 - `--destination <name>`: destination name for AuthBroker stores
 - `--auth-root <path>`: root folder with auth configs (defaults to `AUTH_BROKER_PATH` or cwd)
 - `--env <file>`: use a specific `.env` file (via EnvFileSessionStore)
+- `--system-type <cloud|onprem|legacy>`: **required for every command that connects.**
+  Which kind of system you are dialling; `SAP_SYSTEM_TYPE` in the environment or
+  the `.env` file works too. It is not derived from the URL or the authentication
+  type — the cloud and on-prem connectors open and release sessions differently,
+  and the server cannot be asked which one it is. `legacy` is on-prem below BASIS
+  7.50.
+- `--browser-auth-port <port>`: callback port for a browser login (default 10001).
+  A login opens the system browser and waits up to three minutes.
 
 ## Usage
 
 ```bash
 # Package backup (recursive)
-adt-backup backup --package ZPKG_TEST --output backup.yaml --destination TRIAL
+adt-backup backup --package ZPKG_TEST --output backup.yaml --destination TRIAL --system-type cloud
 
 # Verify (source-only by default)
 adt-backup verify --input backup.yaml --destination TRIAL
@@ -99,7 +109,35 @@ See `docs/roadmap.yaml` for per-object backup/restore status and the plan for re
 
 > **Note**: For `serviceBinding`, the publication state (`srvb:published`) is preserved in the backup and re-applied during restore — published bindings are re-published, unpublished bindings are unpublished.
 
-> **Note**: For Message Classes (`MSAG`), the class and its messages are backed up as one atomic JSON unit (parsed, not raw XML). Restore creates the class shell, upserts each message, and reconciles by deleting target-only messages. Message classes are not activatable and are restored early, with no co-activation.
+> **Note**: For Message Classes (`MSAG`), the class and its messages are backed up as one atomic JSON unit (parsed, not raw XML). Restore creates the class shell (or, for an existing class, rewrites its description when it differs), upserts each message, and reconciles by deleting target-only messages. Message classes are not activatable and are restored early, with no co-activation.
+
+> **Note**: Documents are restored whole. `domain`, `dataElement`, `tableType` and `functionGroup` are created and then written with the backed-up metadata XML. An existing `package` is left as it is on the target; a missing one is created with the `--super-package` / `--software-component` / `--transport-layer` overrides.
+
+## How restore talks to the system
+
+`@mcp-abap-adt/adt-clients` 23 makes one request per call and composes nothing, so
+the sequences are this tool's:
+
+- each object: create → lock → write → unlock → activate, each step judged by an
+  `@mcp-abap-adt/adt-strategies` verdict; the unlock runs on every path out of a
+  taken lock, and a failure reports SAP's own message;
+- group activation starts a run, waits for it (long polling, up to five minutes),
+  reads its results, then checks the inactive list;
+- the package walk and function-group children are read level by level from the
+  repository node structure; a package that does not exist is an error, an empty
+  one is an empty tree;
+- where-used reads the scope, selects every type and searches with it (without a
+  scope resource, it searches unscoped).
+
+## Upgrading from 2.0.0
+
+- Node.js 22 or 24 is required.
+- Pass `--system-type cloud|onprem|legacy` (or set `SAP_SYSTEM_TYPE`) on every
+  command that connects; there is no default.
+- Backups keep their format. New backups record table types as `xml` (they always
+  held the XML); older ones with `source` still restore and diff as documents.
+- Message-class payloads no longer carry the raw attribute bag, master system or
+  responsible person; comparisons never used them.
 
 ## Smoke Checklist
 

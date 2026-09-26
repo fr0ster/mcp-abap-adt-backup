@@ -1,6 +1,10 @@
 'use strict';
 // Offline assertions for message-class support. Runs against compiled dist/.
+// The fakes answer the way adt-clients 23 does: every member returns an
+// IAdtResponse (`ok`, `getResult().value`, `getError()`) and does not throw
+// for SAP's answer; `readMetadata()` of a message class is the raw document.
 const assert = require('node:assert');
+const { ok, fail } = require('./answers.cjs');
 
 const { mapAdtTypeToSupported } = require('../../dist/lib/tree/mapAdtTypeToSupported');
 const { normalizeType } = require('../../dist/lib/utils/normalizeType');
@@ -22,28 +26,44 @@ assert.strictEqual(
 const { readPayloadForType } = require('../../dist/lib/tree/readPayloadForType');
 const { readMetadataXmlForType } = require('../../dist/lib/backup/readMetadataXmlForType');
 const { backupObject } = require('../../dist/lib/backup/backupObject');
+const { parseMessageClassXml } = require('../../dist/lib/messageClass/parseMessageClassXml');
 
-function fakeReadClient() {
-  const parsed = {
-    name: 'ZMY_MSG',
-    description: 'My messages',
-    packageName: 'ZPKG',
-    language: 'E',
-    messages: [
-      { msgno: '001', msgtext: 'First', selfExplanatory: false },
-      { msgno: '002', msgtext: 'Second', selfExplanatory: true, description: 'why' },
-    ],
-  };
+// The shape ADT answers for GET /sap/bc/adt/messageclass/{name}.
+const MSAG_XML =
+  '<?xml version="1.0" encoding="UTF-8"?>' +
+  '<mc:messageClass xmlns:mc="http://www.sap.com/adt/MessageClass" xmlns:adtcore="http://www.sap.com/adt/core" ' +
+  'adtcore:name="ZMY_MSG" adtcore:description="My messages" adtcore:language="EN" adtcore:masterLanguage="EN" ' +
+  'adtcore:responsible="SOMEONE" adtcore:type="MSAG/N">' +
+  '<adtcore:packageRef adtcore:name="ZPKG"/>' +
+  '<mc:messages mc:msgno="001" mc:msgtext="First" mc:selfexplainatory="false"/>' +
+  '<mc:messages mc:msgno="002" mc:msgtext="Second" mc:selfexplainatory="true" adtcore:description="why"/>' +
+  '</mc:messageClass>';
+
+function fakeReadClient(xml = MSAG_XML) {
   return {
     getMessageClass() {
       return {
-        async read() {
-          return { readResult: { data: '<mc:messageClass/>' }, messageClass: parsed, errors: [] };
+        async readMetadata() {
+          return ok(xml);
         },
       };
     },
   };
 }
+
+const parsedFromXml = parseMessageClassXml(MSAG_XML);
+assert.strictEqual(parsedFromXml.name, 'ZMY_MSG', 'parser reads the class name');
+assert.strictEqual(parsedFromXml.packageName, 'ZPKG', 'parser reads the package');
+assert.strictEqual(parsedFromXml.description, 'My messages', 'parser reads the class description');
+assert.deepStrictEqual(
+  parsedFromXml.messages,
+  [
+    { msgno: '001', msgtext: 'First', selfExplanatory: false },
+    { msgno: '002', msgtext: 'Second', selfExplanatory: true, description: 'why' },
+  ],
+  'parser reads every message',
+);
+assert.strictEqual(parsedFromXml.responsible, undefined, 'volatile metadata is not kept');
 
 console.log('OK task1');
 
@@ -56,37 +76,67 @@ console.log('OK task1');
   assert.strictEqual(roundtrip.name, 'ZMY_MSG', 'payload has class name');
 
   const xml = await readMetadataXmlForType(client, 'messageClass', 'ZMY_MSG');
-  assert.strictEqual(xml, '<mc:messageClass/>', 'metadata returns raw xml');
+  assert.strictEqual(xml, MSAG_XML, 'metadata returns raw xml');
 
   const obj = await backupObject(client, { type: 'messageClass', name: 'ZMY_MSG' });
   assert.strictEqual(obj.config.packageName, 'ZPKG', 'flat backup config packageName');
   assert.strictEqual(JSON.parse(obj.source).messages.length, 2, 'flat backup source json');
 
+  // A class that is not there: 404 reads as absent, not as an error.
+  const missing = {
+    getMessageClass() {
+      return { async readMetadata() { return fail(404, 'Message class ZNOPE does not exist'); } };
+    },
+  };
+  assert.deepStrictEqual(
+    await readPayloadForType(missing, 'messageClass', 'ZNOPE'),
+    {},
+    'absent message class has no payload',
+  );
+
   // --- Task 3: restore helper + activation gate ---
-  const { restoreMessageClass } = require('../../dist/lib/messageClass/restoreMessageClass');
+  const {
+    restoreMessageClass,
+    withClassDescription,
+  } = require('../../dist/lib/messageClass/restoreMessageClass');
   const { isActivatable } = require('../../dist/lib/restore/isActivatable');
 
   assert.strictEqual(isActivatable('messageClass'), false, 'messageClass not activatable');
   assert.strictEqual(isActivatable('class'), true, 'class activatable');
 
-  function fakeRestoreClient(existingMsgnos) {
-    const calls = { create: 0, update: 0, msgUpsert: [], msgDelete: [] };
+  // The class description lives on the root; every message has one too.
+  const edited = withClassDescription(MSAG_XML, 'New & "quoted"');
+  assert.match(edited, /<mc:messageClass [^>]*adtcore:description="New &amp; &quot;quoted&quot;"/, 'root description set, escaped');
+  assert.match(edited, /adtcore:description="why"/, 'message description untouched');
+  const noRootDescription = MSAG_XML.replace(' adtcore:description="My messages"', '');
+  assert.match(
+    withClassDescription(noRootDescription, 'Added'),
+    /^[^]*<mc:messageClass adtcore:description="Added"/,
+    'description inserted on the root when it had none',
+  );
+
+  function fakeTarget(existingMsgnos, overrides = {}) {
+    const calls = { create: 0, lock: 0, updateMetadata: [], unlock: 0, msgUpsert: [], msgDelete: [] };
+    const classXml =
+      '<mc:messageClass xmlns:mc="http://www.sap.com/adt/MessageClass" xmlns:adtcore="http://www.sap.com/adt/core" adtcore:name="ZMY_MSG" adtcore:description="old">' +
+      existingMsgnos.map((n) => `<mc:messages mc:msgno="${n}" mc:msgtext="x"/>`).join('') +
+      '</mc:messageClass>';
     return {
       calls,
-      getMessageClass() {
-        return {
-          async create() { calls.create++; },
-          async update() { calls.update++; },
-          async read() {
-            return { messageClass: { messages: existingMsgnos.map((n) => ({ msgno: n, msgtext: 'x' })) } };
-          },
-        };
+      client: {
+        getMessageClass() {
+          return {
+            async create() { calls.create++; return ok(''); },
+            async readMetadata() { return ok(classXml); },
+            async lock() { calls.lock++; return ok('LOCK1'); },
+            async updateMetadata(_cfg, opts) { calls.updateMetadata.push(opts); return ok(''); },
+            async unlock() { calls.unlock++; return ok(undefined); },
+          };
+        },
       },
-      getMessageClassMessage() {
-        return {
-          async update(cfg) { calls.msgUpsert.push(cfg.msgno); },
-          async delete(cfg) { calls.msgDelete.push(cfg.msgno); },
-        };
+      messages: {
+        update: overrides.update ?? (async (cfg) => { calls.msgUpsert.push(cfg.msgno); return ok(''); }),
+        async delete(cfg) { calls.msgDelete.push(cfg.msgno); return ok(''); },
       },
     };
   }
@@ -95,39 +145,40 @@ console.log('OK task1');
     messages: [{ msgno: '001', msgtext: 'a' }, { msgno: '002', msgtext: 'b' }] };
 
   // create mode: shell created, both messages upserted, nothing deleted
-  const c1 = fakeRestoreClient([]);
+  const c1 = fakeTarget([]);
   await restoreMessageClass(c1, parsed, { mode: 'create', name: 'ZMY_MSG', description: 'd', packageName: 'ZPKG' });
   assert.strictEqual(c1.calls.create, 1, 'create shell once');
   assert.deepStrictEqual(c1.calls.msgUpsert.sort(), ['001', '002'], 'upsert both');
   assert.deepStrictEqual(c1.calls.msgDelete, [], 'no deletes on create');
+  assert.strictEqual(c1.calls.lock, 0, 'create does not rewrite the shell');
 
-  // update mode: target has extra '003' -> it must be deleted
-  const c2 = fakeRestoreClient(['001', '002', '003']);
+  // update mode: description differs -> read, lock, write the whole document,
+  // unlock; target has extra '003' -> it must be deleted
+  const c2 = fakeTarget(['001', '002', '003']);
   await restoreMessageClass(c2, parsed, { mode: 'update', name: 'ZMY_MSG', description: 'd', packageName: 'ZPKG' });
-  assert.strictEqual(c2.calls.update, 1, 'update shell once');
+  assert.strictEqual(c2.calls.lock, 1, 'update locks the class once');
+  assert.strictEqual(c2.calls.updateMetadata.length, 1, 'update writes the class document once');
+  assert.strictEqual(c2.calls.updateMetadata[0].lockHandle, 'LOCK1', 'write carries the lock handle');
+  assert.match(c2.calls.updateMetadata[0].source, /adtcore:description="d"/, 'write carries the new description');
+  assert.strictEqual(c2.calls.unlock, 1, 'update unlocks the class');
   assert.deepStrictEqual(c2.calls.msgUpsert.sort(), ['001', '002'], 'upsert both on update');
   assert.deepStrictEqual(c2.calls.msgDelete, ['003'], 'delete target-only extra');
 
-  // --- Task 4: restoreObject / restoreTreeNode delegate to helper ---
-  const { restoreObject } = require('../../dist/lib/restore/restoreObject');
-  const { restoreTreeNode } = require('../../dist/lib/restore/restoreTreeNode');
+  // update mode, description already equal: no lock, no write
+  const c3 = fakeTarget(['001']);
+  await restoreMessageClass(c3, parsed, { mode: 'update', name: 'ZMY_MSG', description: 'old' });
+  assert.strictEqual(c3.calls.lock, 0, 'an unchanged description is not rewritten');
 
-  const objClient = fakeRestoreClient([]);
-  await restoreObject(objClient, {
-    id: 'MESSAGECLASS:ZMY_MSG', type: 'messageClass', name: 'ZMY_MSG',
-    config: { name: 'ZMY_MSG' }, source: JSON.stringify(parsed),
-  }, 'create', false);
-  assert.strictEqual(objClient.calls.create, 1, 'restoreObject creates shell');
-  assert.deepStrictEqual(objClient.calls.msgUpsert.sort(), ['001', '002'], 'restoreObject upserts messages');
-
-  const treeClient = fakeRestoreClient([]);
+  // --- Task 4: writeObject delegates message classes to the helper ---
+  const { writeObject } = require('../../dist/lib/restore/writeObject');
+  const treeTarget = fakeTarget([]);
   const codeBase64 = Buffer.from(JSON.stringify(parsed), 'utf8').toString('base64');
-  await restoreTreeNode(treeClient, {
+  await writeObject(treeTarget, {
     type: 'messageClass', name: 'ZMY_MSG', restoreStatus: 'ok',
     codeFormat: 'json', codeBase64, config: { name: 'ZMY_MSG' },
-  }, 'create', false);
-  assert.strictEqual(treeClient.calls.create, 1, 'restoreTreeNode creates shell');
-  assert.deepStrictEqual(treeClient.calls.msgUpsert.sort(), ['001', '002'], 'restoreTreeNode upserts messages');
+  }, { mode: 'create', activate: false });
+  assert.strictEqual(treeTarget.calls.create, 1, 'writeObject creates shell');
+  assert.deepStrictEqual(treeTarget.calls.msgUpsert.sort(), ['001', '002'], 'writeObject upserts messages');
 
   // --- Task 6: canonicalization ---
   const { canonicalizeMessageClass } = require('../../dist/lib/messageClass/canonicalizeMessageClass');
@@ -144,50 +195,49 @@ console.log('OK task1');
   assert.notStrictEqual(a, d, 'canonical form reflects class description changes');
 
   // --- post-create transient lock retry ---
-  // First message upsert fails twice with the EU510 "currently editing" 403,
-  // then succeeds — restoreMessageClass must retry, not abort.
-  function fakeFlakyClient(failFirstN) {
-    let fails = failFirstN;
-    const calls = { create: 0, msgUpsert: [] };
-    return {
-      calls,
-      getMessageClass() {
-        return { async create() { calls.create++; }, async update() {},
-          async read() { return { messageClass: { messages: [] } }; } };
-      },
-      getMessageClassMessage() {
-        return {
-          async update(cfg) {
-            if (fails > 0) {
-              fails--;
-              const err = new Error('Request failed with status code 403');
-              err.response = { data: '<exc:exception>...EU510...currently editing...' };
-              throw err;
-            }
-            calls.msgUpsert.push(cfg.msgno);
-          },
-          async delete() {},
-        };
-      },
-    };
-  }
-  const flaky = fakeFlakyClient(2);
+  // The first message write is refused twice with the EU510 "currently
+  // editing" 403, then succeeds — restoreMessageClass must retry, not abort.
+  let fails = 2;
+  const flaky = fakeTarget([], {
+    update: async (cfg) => {
+      if (fails > 0) {
+        fails--;
+        return fail(403, 'Message class ZMY_MSG is currently being edited (EU510)', 'ExceptionResourceNoAccess');
+      }
+      flaky.calls.msgUpsert.push(cfg.msgno);
+      return ok('');
+    },
+  });
   await restoreMessageClass(flaky, parsed, {
     mode: 'create', name: 'ZMY_MSG', description: 'd', packageName: 'ZPKG',
     retryDelayMs: 1, retryAttempts: 6,
   });
   assert.deepStrictEqual(flaky.calls.msgUpsert.sort(), ['001', '002'], 'retries transient lock then upserts');
 
-  // A non-transient error must NOT be retried — it propagates.
-  const hardFail = {
-    getMessageClass() { return { async create() {}, async update() {}, async read() { return { messageClass: { messages: [] } }; } }; },
-    getMessageClassMessage() { return { async update() { throw new Error('boom 500'); }, async delete() {} }; },
-  };
+  // A refusal that is not the transient one is NOT retried — it propagates
+  // with SAP's message.
+  let hardCalls = 0;
+  const hardFail = fakeTarget([], {
+    update: async () => { hardCalls++; return fail(500, 'boom 500'); },
+  });
   let threw = false;
   try {
     await restoreMessageClass(hardFail, parsed, { mode: 'create', name: 'Z', retryDelayMs: 1 });
   } catch (e) { threw = /boom 500/.test(e.message); }
-  assert.ok(threw, 'non-transient error propagates without retry');
+  assert.ok(threw, 'non-transient refusal propagates with SAP message');
+  assert.strictEqual(hardCalls, 1, 'non-transient refusal is not retried');
+
+  // A bare 403 without the edit-lock markers is an authorization failure.
+  let authCalls = 0;
+  const denied = fakeTarget([], {
+    update: async () => { authCalls++; return fail(403, 'No authorization'); },
+  });
+  await assert.rejects(
+    restoreMessageClass(denied, parsed, { mode: 'create', name: 'Z', retryDelayMs: 1 }),
+    /No authorization/,
+    'bare 403 propagates',
+  );
+  assert.strictEqual(authCalls, 1, 'bare 403 is not retried');
 
   console.log('OK task6');
 })().catch((e) => { console.error(e); process.exit(1); });

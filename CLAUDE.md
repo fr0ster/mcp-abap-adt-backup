@@ -24,11 +24,14 @@ npm run lint:check
 # Format code
 npm run format
 
+# Offline tests against dist/ (no SAP; fakes answer IAdtResponse)
+npm run test:offline
+
 # Run integration tests (requires SAP connection)
 npm run test:integration
 ```
 
-No automated test framework is configured. For validation, build and exercise the CLI manually (see `docs/SMOKE_CHECKLIST.md`).
+No test framework is configured: `test:offline` is plain `node:assert` over `dist/`. For validation against a system, build and exercise the CLI manually (see `docs/SMOKE_CHECKLIST.md`).
 
 ## Architecture
 
@@ -66,7 +69,7 @@ Objects store their payload in one of two formats (see `docs/roadmap.yaml` for w
 
 The format is tracked per node in `codeFormat` and determines how backup/restore/diff operations handle the content.
 
-Message classes (`messageClass`, `MSAG/N`) are the exception: they store parsed JSON (not raw XML — the `adt-clients` XML parser is not importable) covering the class and all of its messages as one atomic backup unit. Restore is not activatable and works by shell-create + per-message upsert + reconcile (deletes target-only messages).
+Message classes (`messageClass`, `MSAG/N`) are the exception: they store parsed JSON covering the class and all of its messages as one atomic backup unit. `adt-clients` answers the class document as raw XML; `messageClass/parseMessageClassXml.ts` reads it (ported from adt-clients). Restore is not activatable and works by shell-create + per-message upsert + reconcile (deletes target-only messages).
 
 ### ADT Type Mapping
 
@@ -74,12 +77,14 @@ Message classes (`messageClass`, `MSAG/N`) are the exception: they store parsed 
 
 ### Core Modules (`src/lib/`)
 
-- **auth/** — Authentication via `@mcp-abap-adt/auth-broker`. Supports `--destination` (named system), `--env`/`--env-path` (.env file)
+- **auth/** — Authentication via `@mcp-abap-adt/auth-broker` 3 (provider factory, `browserCallbackStrategy`). Supports `--destination` (named system), `--env`/`--env-path` (.env file)
+- **connection/** — `createConnection` builds `AdtCloudConnector` or `AdtOnPremConnector` from the stated system type (`--system-type` / `SAP_SYSTEM_TYPE`: `cloud`, `onprem`, `legacy`; never inferred), `connect()` before the first request, `closeConnection()` on exit
+- **adt/** — `answer.ts`: how the CLI reads `IAdtResponse` (`readAnswer`: 404/410 or a 200 with an empty body is "nothing to take"; `requireOk`; `AdtCallError` carries SAP's answer). `RestoreTarget`: the client plus the message-row writer
 - **backup/** — Fetch source code (`readSourceText`) and metadata XML (`readMetadataXmlForType`) from ADT
-- **restore/** — `restoreTreeBackup` (full pipeline), `restoreObject` (per-type logic), `analyzeDependencies` (SCC-based grouping), `sortByDependencies`/`sortTreeNodesByDependencies`
-- **tree/** — `buildPackageBackupTree` (recursive tree construction), `enrichTreeNode` (add payload/config), `mapAdtTypeToSupported`, `flattenTree`, `findNodeInTree`
+- **restore/** — `restoreTreeBackup` (full pipeline), `writeObject` (the one create → lock → write → unlock → activate sequence, per-type configs), `activateGroup` (group activation that waits for its run), `deleteBackupObjects` (group deletion judged by `analyseDeletion`), `analyzeDependencies` (SCC-based grouping), `sortTreeNodesByDependencies`
+- **tree/** — `walkPackage` / `functionGroupChildren` (the package walk and FUGR children, ported from adt-clients' scripts since the library dropped its walkers), `buildPackageBackupTree` (recursive tree construction), `enrichTreeNode` (add payload/config), `mapAdtTypeToSupported`, `flattenTree`, `findNodeInTree`
 - **verify/** — `verifyBackup` (compare backup vs system), `verifyObjectInSystem` (single object check). Supports `pre-restore` and `post-restore` modes
-- **dependencies/** — `collectTreeDependencies` (fetch where-used lists from ADT)
+- **dependencies/** — `collectTreeDependencies` (where-used: scope → enable all types → search, per object)
 - **xml/** — XML parsing with `fast-xml-parser`. Type-specific parsers (`parseClassConfig`, `parseDomainConfig`, etc.) and utilities (`extractMetadata`, `findNode`)
 - **crypto/** — Checksums for backup integrity: file-level (`computeBackupChecksum`) and tree-level (`updateTreeChecksums`/`verifyTreeChecksums`)
 - **cli/** — Argument parsing (`parseArgs`), usage text, verbosity control (`-v`/`-vv`/`-vvv`), log environment
@@ -115,7 +120,7 @@ Message classes (`messageClass`, `MSAG/N`) are the exception: they store parsed 
 - Respond to the user in the language they use to communicate
 - Biome for linting/formatting (2-space indent, single quotes, semicolons)
 - TypeScript strict mode, target es2022, CommonJS output
-- Node.js >= 22 (`engines.node`); CI and release build on Node 22
+- Node.js 22 or 24 (`engines.node: ^22 || ^24`, as auth-broker 3 requires); CI and release build on Node 22
 - `noExplicitAny`: warn in production, off in tests
 - Biome also handles import organization (`organizeImports: on`)
 
@@ -125,7 +130,9 @@ Short imperative summaries, <= 72 chars. Use scope when useful (e.g., `cli: hand
 
 ## Key Dependencies
 
-- `@mcp-abap-adt/adt-clients` — ADT API client (core SAP interaction)
+- `@mcp-abap-adt/adt-clients` (23) — ADT API client. Every member is ONE request and answers `IAdtResponse`; it throws only for its own causes, composes no sequence and judges nothing. The CLI composes (lock/write/unlock/activate, walks, where-used, activation wait) and judges (`analyse` strategies)
+- `@mcp-abap-adt/adt-strategies` — the readings and verdicts passed to adt-clients (`analyseException`, `analyseActivation`, `analyseDeletion`, `analysePublication`, `utilWhereUsedReferences`, `utilInactiveObjects`, `utilActivationRunId`, `readNodeStructure`)
+- Contract types come from `@mcp-abap-adt/interfaces-adt`, `-adt-connection`, `-auth`, `-auth-sap`, `-utils` directly; adt-clients re-exports none. Keep one copy of each in `npm ls`
 - `@mcp-abap-adt/connection` — ABAP connection handling
 - `@mcp-abap-adt/auth-broker` / `auth-providers` / `auth-stores` — Authentication ecosystem
 - `fast-xml-parser` — XML parsing for ADT responses

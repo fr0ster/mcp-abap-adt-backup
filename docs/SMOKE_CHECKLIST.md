@@ -8,9 +8,13 @@ This checklist is for manual validation after landscape/auth setup is ready.
 ```bash
 npm run build
 ```
-2. Auth is configured and valid for your destination:
+2. Auth is configured and valid for your destination, and you know which kind of
+   system it is. Every online command below also needs
+   `--system-type cloud|onprem|legacy` (or `SAP_SYSTEM_TYPE` set in the
+   environment); it is never derived from the URL:
 ```bash
 adt-backup --help
+export SAP_SYSTEM_TYPE=cloud   # or onprem / legacy
 ```
 3. Use a writable temp folder:
 ```bash
@@ -139,3 +143,7 @@ Expected:
 ## 9) Message class (MSAG)
 
 - [ ] Message class (`MSAG`): backup a class with >=2 messages; restore into a scratch package; `verify` reports OK; edit one message text in the target, re-run `verify` → `source-mismatch`; re-`restore` → OK; add a stray message in the target, re-`restore` → stray removed (reconcile).
+- [ ] Restore into a fresh package: each object logs create → lock → write → unlock at `-vvv`; a refused step reports SAP's message (not an axios status string); no object is left locked after a failed write.
+- [ ] Group activation: `-vvv` shows the activation run polled until `finished`; a syntax error in one object is reported with SAP's `[E]` message and the object is listed as remaining inactive.
+- [ ] Documents: a domain with fixed values, a data element with labels and a table type restore with their full definition (the backed-up XML is written whole).
+- [ ] Function group: its function modules and includes appear as children in the backup and are restored.

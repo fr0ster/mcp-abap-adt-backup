@@ -32,6 +32,10 @@ const restoreDestinationDir =
   restoreAuth?.destination_dir || verifyDestinationDir || destinationDir || '';
 const restoreEnvironmentFile =
   restoreAuth?.environment_file || verifyEnvironmentFile || environmentFile || '';
+// The kind of system each run dials is stated, never inferred from the URL.
+const systemType = backupAuth?.system_type || '';
+const verifySystemType = verifyAuth?.system_type || systemType;
+const restoreSystemType = restoreAuth?.system_type || verifySystemType;
 const outputDir = config?.tests?.backup?.output_dir || '';
 const packageName = config?.tests?.backup?.package?.name || '';
 const className = config?.tests?.backup?.class?.name || '';
@@ -43,6 +47,7 @@ const verifyStrict = Boolean(config?.tests?.verify?.strict);
 const missing = [];
 if (!packageName) missing.push('tests.backup.package.name');
 if (!className) missing.push('tests.backup.class.name');
+if (!systemType) missing.push('auth_broker.backup.system_type');
 if (!outputDir) missing.push('tests.backup.output_dir');
 if (!environmentFile && !destination) {
   missing.push('auth_broker.backup.abap.destination');
@@ -71,7 +76,11 @@ if (!fs.existsSync(cliPath)) {
   process.exit(1);
 }
 
-const baseArgs = destination ? ['--destination', destination] : [];
+const baseArgs = [
+  ...(destination ? ['--destination', destination] : []),
+  '--system-type',
+  systemType,
+];
 const envArgs = environmentFile ? ['--env', environmentFile] : [];
 const defaultDestinationDir =
   process.platform === 'win32'
@@ -87,9 +96,11 @@ if (environmentFile) {
   console.log(`Using backup destination_dir: ${resolvedDestinationDir}`);
 }
 
-const verifyBaseArgs = verifyDestination
-  ? ['--destination', verifyDestination]
-  : [];
+const verifyBaseArgs = [
+  ...(verifyDestination ? ['--destination', verifyDestination] : []),
+  '--system-type',
+  verifySystemType,
+];
 const verifyEnvArgs = verifyEnvironmentFile
   ? ['--env', verifyEnvironmentFile]
   : [];
@@ -104,9 +115,11 @@ if (verifyEnvironmentFile) {
   console.log(`Using verify destination_dir: ${resolvedVerifyDestinationDir}`);
 }
 
-const restoreBaseArgs = restoreDestination
-  ? ['--destination', restoreDestination]
-  : [];
+const restoreBaseArgs = [
+  ...(restoreDestination ? ['--destination', restoreDestination] : []),
+  '--system-type',
+  restoreSystemType,
+];
 const restoreEnvArgs = restoreEnvironmentFile
   ? ['--env', restoreEnvironmentFile]
   : [];
