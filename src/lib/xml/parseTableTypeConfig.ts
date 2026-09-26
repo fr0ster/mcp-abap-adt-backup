@@ -1,4 +1,3 @@
-import type { ITableTypeConfig } from '@mcp-abap-adt/adt-clients';
 import { xmlParser } from '../constants/xmlParser';
 import type { NodeValue } from '../types';
 import { findAttribute } from './findAttribute';
@@ -6,7 +5,25 @@ import { findNode } from './findNode';
 import { findNodeValue } from './findNodeValue';
 import { getNodeAttribute } from './getNodeAttribute';
 
-export function parseTableTypeConfig(xml: string): Partial<ITableTypeConfig> {
+/**
+ * What the backup records about a table type, read from its document.
+ *
+ * The backup's own record rather than `ITableTypeConfig`: that contract
+ * describes a create and has no row-kind, access or key fields. Values are
+ * kept as the document wrote them; the restore writes the document itself.
+ */
+export interface TableTypeBackupConfig {
+  tableTypeName?: string;
+  description?: string;
+  packageName?: string;
+  rowTypeName?: string;
+  rowTypeKind?: string;
+  accessType?: string;
+  primaryKeyDefinition?: string;
+  primaryKeyKind?: string;
+}
+
+export function parseTableTypeConfig(xml: string): TableTypeBackupConfig {
   const parsed = xmlParser.parse(xml) as NodeValue;
   const root =
     findNode(parsed, ['ttyp:tableType', 'tableType', 'blue:wbobj', 'wbobj']) ??
@@ -35,42 +52,35 @@ export function parseTableTypeConfig(xml: string): Partial<ITableTypeConfig> {
     findAttribute(rowTypeRef, 'adtcore:name') ||
     findNodeValue(root, ['ttyp:rowTypeName', 'rowTypeName']);
 
-  const rowTypeKind = (findNodeValue(root, [
-    'ttyp:rowTypeKind',
-    'rowTypeKind',
-  ]) ||
+  const rowTypeKind =
+    findNodeValue(root, ['ttyp:rowTypeKind', 'rowTypeKind']) ||
     getNodeAttribute(root, 'ttyp:rowTypeKind') ||
-    findAttribute(root, 'ttyp:rowTypeKind')) as
-    | ITableTypeConfig['rowTypeKind']
-    | undefined;
+    findAttribute(root, 'ttyp:rowTypeKind');
 
-  const accessType = (findNodeValue(root, ['ttyp:accessType', 'accessType']) ||
+  const accessType =
+    findNodeValue(root, ['ttyp:accessType', 'accessType']) ||
     getNodeAttribute(root, 'ttyp:accessType') ||
-    findAttribute(root, 'ttyp:accessType')) as
-    | ITableTypeConfig['accessType']
-    | undefined;
+    findAttribute(root, 'ttyp:accessType');
 
-  const primaryKeyDefinition = (findNodeValue(root, [
-    'ttyp:primaryKeyDefinition',
-    'primaryKeyDefinition',
-    'ttyp:keyDefinition',
-    'keyDefinition',
-  ]) ||
+  const primaryKeyDefinition =
+    findNodeValue(root, [
+      'ttyp:primaryKeyDefinition',
+      'primaryKeyDefinition',
+      'ttyp:keyDefinition',
+      'keyDefinition',
+    ]) ||
     getNodeAttribute(root, 'ttyp:primaryKeyDefinition') ||
-    findAttribute(root, 'ttyp:primaryKeyDefinition')) as
-    | ITableTypeConfig['primaryKeyDefinition']
-    | undefined;
+    findAttribute(root, 'ttyp:primaryKeyDefinition');
 
-  const primaryKeyKind = (findNodeValue(root, [
-    'ttyp:primaryKeyKind',
-    'primaryKeyKind',
-    'ttyp:keyKind',
-    'keyKind',
-  ]) ||
+  const primaryKeyKind =
+    findNodeValue(root, [
+      'ttyp:primaryKeyKind',
+      'primaryKeyKind',
+      'ttyp:keyKind',
+      'keyKind',
+    ]) ||
     getNodeAttribute(root, 'ttyp:primaryKeyKind') ||
-    findAttribute(root, 'ttyp:primaryKeyKind')) as
-    | ITableTypeConfig['primaryKeyKind']
-    | undefined;
+    findAttribute(root, 'ttyp:primaryKeyKind');
 
   return {
     tableTypeName,

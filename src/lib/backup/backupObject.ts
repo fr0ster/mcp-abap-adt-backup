@@ -1,8 +1,8 @@
+import type { AdtClient } from '@mcp-abap-adt/adt-clients';
 import type {
-  AdtClient,
   IFunctionGroupConfig,
   IServiceDefinitionConfig,
-} from '@mcp-abap-adt/adt-clients';
+} from '@mcp-abap-adt/interfaces-adt';
 import type { BackupConfig, BackupObject, ObjectSpec } from '../types';
 import { applyConfigName } from '../utils/applyConfigName';
 import { objectId } from '../utils/objectId';

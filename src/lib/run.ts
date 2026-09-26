@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { ObjectReference } from '@mcp-abap-adt/adt-clients';
+import type { IObjectReference } from '@mcp-abap-adt/interfaces-adt';
 import { AdtClient, getSystemInformation } from '@mcp-abap-adt/adt-clients';
 import { createAbapConnection } from '@mcp-abap-adt/connection';
 import { XMLParser } from 'fast-xml-parser';
@@ -501,7 +501,7 @@ export async function run(): Promise<void> {
     const plan = YAML.parse(fs.readFileSync(planPath, 'utf8')) as RestorePlan;
 
     // Collect all plan refs (non-package, matching filter)
-    const planRefs: ObjectReference[] = [];
+    const planRefs: IObjectReference[] = [];
     for (const group of plan.groups) {
       for (const action of group.actions) {
         if (action.type === 'package' || !action.adtType) continue;
@@ -542,7 +542,7 @@ export async function run(): Promise<void> {
     let failed = 0;
 
     for (const group of plan.groups) {
-      const groupRefs: ObjectReference[] = [];
+      const groupRefs: IObjectReference[] = [];
       for (const action of group.actions) {
         if (
           action.type === 'package' ||

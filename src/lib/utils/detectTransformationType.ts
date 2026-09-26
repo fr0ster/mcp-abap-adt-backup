@@ -1,4 +1,4 @@
-import type { ITransformationConfig } from '@mcp-abap-adt/adt-clients';
+import type { ITransformationConfig } from '@mcp-abap-adt/interfaces-adt';
 
 export function detectTransformationType(
   source?: string,

@@ -1,5 +1,5 @@
+import type { AdtClient } from '@mcp-abap-adt/adt-clients';
 import type {
-  AdtClient,
   IAppendStructureConfig,
   IBehaviorDefinitionConfig,
   IBehaviorImplementationConfig,
@@ -23,7 +23,7 @@ import type {
   ITableConfig,
   ITableTypeConfig,
   ITransformationConfig,
-} from '@mcp-abap-adt/adt-clients';
+} from '@mcp-abap-adt/interfaces-adt';
 import { restoreMessageClass } from '../messageClass/restoreMessageClass';
 import type { ParsedMessageClass } from '../messageClass/types';
 import type { BackupObject, RestoreMode } from '../types';

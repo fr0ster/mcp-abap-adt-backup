@@ -1,4 +1,5 @@
-import type { AdtClient, ObjectReference } from '@mcp-abap-adt/adt-clients';
+import type { AdtClient } from '@mcp-abap-adt/adt-clients';
+import type { IObjectReference } from '@mcp-abap-adt/interfaces-adt';
 import { logVerbose } from '../cli/logVerbose';
 import type { BackupObject, RestoreMode } from '../types';
 import { verifyObjectInSystem } from '../verify/verifyObjectInSystem';
@@ -46,7 +47,7 @@ export async function restoreObjects(
     2,
     `Restoring ${ordered.length} object(s) in flat mode (mode=${mode}, activate=${activateOnUpdate})`,
   );
-  const activationList: ObjectReference[] = [];
+  const activationList: IObjectReference[] = [];
 
   for (const obj of ordered) {
     logVerbose(3, `Restore ${obj.type}:${obj.name}`);

@@ -1,4 +1,5 @@
-import type { AdtClient, ObjectReference } from '@mcp-abap-adt/adt-clients';
+import type { AdtClient } from '@mcp-abap-adt/adt-clients';
+import type { IObjectReference } from '@mcp-abap-adt/interfaces-adt';
 import { XMLParser } from 'fast-xml-parser';
 import { logVerbose } from '../cli/logVerbose';
 import { flattenTree } from '../tree/flattenTree';
@@ -144,8 +145,8 @@ export async function restoreTreeBackup(
 
   // Helper: check which of our refs are still inactive
   const findInactiveRefs = async (
-    refs: ObjectReference[],
-  ): Promise<ObjectReference[]> => {
+    refs: IObjectReference[],
+  ): Promise<IObjectReference[]> => {
     const result = await client.getUtils().getInactiveObjects();
     const inactiveSet = new Set(
       result.objects.map((o) => `${o.type}:${o.name}`.toUpperCase()),
@@ -156,7 +157,7 @@ export async function restoreTreeBackup(
   };
 
   // Helper to bulk activate a list of refs with verification
-  const bulkActivate = async (phaseName: string, refs: ObjectReference[]) => {
+  const bulkActivate = async (phaseName: string, refs: IObjectReference[]) => {
     if (refs.length === 0) return;
 
     // Check which objects are actually inactive
@@ -244,7 +245,7 @@ export async function restoreTreeBackup(
   const processNode = async (
     node: BackupTreeNode,
     activateFlag: boolean,
-  ): Promise<ObjectReference | null> => {
+  ): Promise<IObjectReference | null> => {
     const nodeId = getNodeObjectId(node);
     if (!nodeId) return null;
 
@@ -345,7 +346,7 @@ export async function restoreTreeBackup(
     await restorePackageRecursive(root, undefined);
   }
 
-  const allProcessedRefs: ObjectReference[] = [];
+  const allProcessedRefs: IObjectReference[] = [];
 
   if (planGroups) {
     // ===== Plan-driven restore: follow plan group order =====
@@ -362,7 +363,7 @@ export async function restoreTreeBackup(
         `[GROUP ${group.id}] ${nonPackageActions.length} object(s)${group.isCircular ? ' (circular)' : ''}`,
       );
 
-      const groupRefs: ObjectReference[] = [];
+      const groupRefs: IObjectReference[] = [];
       for (const action of nonPackageActions) {
         if (action.action === 'skip') {
           logVerbose(2, `  [SKIP] ${action.type}:${action.name}`);
@@ -427,7 +428,7 @@ export async function restoreTreeBackup(
           if (ref) allProcessedRefs.push(ref);
         }
       } else if (phase.activation === 'bulk') {
-        const refs: ObjectReference[] = [];
+        const refs: IObjectReference[] = [];
         for (const node of phaseNodes) {
           const ref = await processNode(node, false);
           if (ref) refs.push(ref);
@@ -439,7 +440,7 @@ export async function restoreTreeBackup(
         logVerbose(2, `  Dependency clustering: ${groups.length} cluster(s)`);
         for (let gi = 0; gi < groups.length; gi++) {
           const group = groups[gi];
-          const clusterRefs: ObjectReference[] = [];
+          const clusterRefs: IObjectReference[] = [];
           for (const node of group.nodes) {
             const ref = await processNode(node, false);
             if (ref) clusterRefs.push(ref);

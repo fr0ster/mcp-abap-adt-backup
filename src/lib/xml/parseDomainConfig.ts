@@ -1,4 +1,3 @@
-import type { IDomainConfig } from '@mcp-abap-adt/adt-clients';
 import { xmlParser } from '../constants/xmlParser';
 import type { NodeValue } from '../types';
 import { findAttribute } from './findAttribute';
@@ -8,7 +7,28 @@ import { getNodeAttribute } from './getNodeAttribute';
 import { toBoolean } from './toBoolean';
 import { toNumber } from './toNumber';
 
-export function parseDomainConfig(xml: string): Partial<IDomainConfig> {
+/**
+ * What the backup records about a domain, read from its document.
+ *
+ * The backup's own record rather than `IDomainConfig`, which describes a create
+ * (name, package, description) and carries none of these fields. The restore
+ * writes the backed-up document, not this record.
+ */
+export interface DomainBackupConfig {
+  domainName?: string;
+  description?: string;
+  packageName?: string;
+  datatype?: string;
+  length?: number;
+  decimals?: number;
+  conversion_exit?: string;
+  sign_exists?: boolean;
+  lowercase?: boolean;
+  value_table?: string;
+  fixed_values?: Array<{ low: string; text: string }>;
+}
+
+export function parseDomainConfig(xml: string): DomainBackupConfig {
   const parsed = xmlParser.parse(xml) as NodeValue;
   const root = findNode(parsed, ['doma:domain', 'domain']) ?? parsed;
   const domainName =

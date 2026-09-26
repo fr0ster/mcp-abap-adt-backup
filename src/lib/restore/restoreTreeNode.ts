@@ -1,5 +1,5 @@
+import type { AdtClient } from '@mcp-abap-adt/adt-clients';
 import type {
-  AdtClient,
   IAccessControlConfig,
   IAppendStructureConfig,
   IBehaviorDefinitionConfig,
@@ -24,7 +24,7 @@ import type {
   ITableConfig,
   ITableTypeConfig,
   ITransformationConfig,
-} from '@mcp-abap-adt/adt-clients';
+} from '@mcp-abap-adt/interfaces-adt';
 import { logVerbose } from '../cli/logVerbose';
 import { decodeBase64 } from '../crypto/decodeBase64';
 import { restoreMessageClass } from '../messageClass/restoreMessageClass';
