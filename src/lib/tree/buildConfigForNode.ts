@@ -63,7 +63,7 @@ export async function buildConfigForNode(
         functionGroupName: name,
         packageName,
         description,
-      } as BackupConfig);
+      });
     }
     case 'functionModule': {
       if (!functionGroupName) {
@@ -92,7 +92,7 @@ export async function buildConfigForNode(
         serviceDefinitionName: name,
         packageName,
         description,
-      } as BackupConfig);
+      });
     }
     case 'accessControl': {
       if (!metadataXml) {
@@ -103,7 +103,7 @@ export async function buildConfigForNode(
         accessControlName: name,
         packageName,
         description,
-      } as BackupConfig);
+      });
     }
     case 'serviceBinding': {
       if (!metadataXml) {

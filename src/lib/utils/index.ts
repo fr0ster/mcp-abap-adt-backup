@@ -1,5 +1,4 @@
 export * from './applyConfigName';
-export * from './asConfig';
 export * from './ensureDescription';
 export * from './formatObjectSpec';
 export * from './normalizeType';

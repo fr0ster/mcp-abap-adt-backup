@@ -1,8 +1,4 @@
 import type { AdtClient } from '@mcp-abap-adt/adt-clients';
-import type {
-  IFunctionGroupConfig,
-  IServiceDefinitionConfig,
-} from '@mcp-abap-adt/interfaces-adt';
 import { readMessageClass } from '../messageClass/readMessageClass';
 import type { BackupConfig, BackupObject, ObjectSpec } from '../types';
 import { applyConfigName } from '../utils/applyConfigName';
@@ -107,7 +103,7 @@ export async function backupObject(
         functionGroupName: spec.name,
         packageName: metadata.packageName,
         description: metadata.description,
-      } as Partial<IFunctionGroupConfig>;
+      };
       return {
         id,
         type: spec.type,
@@ -134,7 +130,7 @@ export async function backupObject(
         serviceDefinitionName: spec.name,
         packageName: metadata.packageName,
         description: metadata.description,
-      } as Partial<IServiceDefinitionConfig>;
+      };
       const source = await readSourceText(client, spec);
       return {
         id,
@@ -228,7 +224,7 @@ export async function backupObject(
           functionModuleName: spec.name,
           packageName: basic.packageName,
           description: basic.description,
-        } as BackupConfig,
+        },
       );
       return {
         id,
@@ -258,7 +254,7 @@ export async function backupObject(
           implementationName: spec.name,
           scalarFunctionName: sfi.scalarFunctionName,
           engineValue: sfi.engineValue ?? 'sqlEngine',
-        } as BackupConfig,
+        },
       );
       return {
         id,
@@ -286,7 +282,7 @@ export async function backupObject(
           description: basic.description,
           appendStructureName: spec.name,
           ...(baseObject ? { baseObject } : {}),
-        } as BackupConfig,
+        },
       );
       return {
         id,
@@ -309,7 +305,7 @@ export async function backupObject(
           name: spec.name,
           packageName: mc.packageName,
           description: mc.description,
-        } as BackupConfig,
+        },
       );
       return {
         id,
@@ -329,7 +325,7 @@ export async function backupObject(
         {
           packageName: basic.packageName,
           description: basic.description,
-        } as BackupConfig,
+        },
       );
       return {
         id,

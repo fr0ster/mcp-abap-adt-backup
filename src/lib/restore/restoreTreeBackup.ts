@@ -1,6 +1,7 @@
 import type { AdtClient } from '@mcp-abap-adt/adt-clients';
 import type { IObjectReference } from '@mcp-abap-adt/interfaces-adt';
 import { XMLParser } from 'fast-xml-parser';
+import type { RestoreTarget } from '../adt/RestoreTarget';
 import { logVerbose } from '../cli/logVerbose';
 import { flattenTree } from '../tree/flattenTree';
 import { getNodeObjectId } from '../tree/getNodeObjectId';
@@ -12,7 +13,7 @@ import type {
 } from '../types';
 import { analyzeDependencies } from './analyzeDependencies';
 import { isActivatable } from './isActivatable';
-import { restoreTreeNode } from './restoreTreeNode';
+import { writeObject } from './writeObject';
 
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
@@ -97,7 +98,7 @@ const RESTORE_PHASES: RestorePhase[] = [
 ];
 
 export async function restoreTreeBackup(
-  client: AdtClient,
+  target: RestoreTarget,
   root: BackupTreeNode,
   mode: RestoreMode,
   activate: boolean,
@@ -109,6 +110,7 @@ export async function restoreTreeBackup(
   superPackageOverride?: string,
   transportLayer?: string,
 ): Promise<void> {
+  const { client } = target;
   const allNodes = flattenTree(root).filter(
     (node) => node.type && node.restoreStatus === 'ok',
   );
@@ -263,17 +265,14 @@ export async function restoreTreeBackup(
     );
 
     try {
-      await restoreTreeNode(
-        client,
-        node,
-        nodeMode,
-        activateFlag,
+      await writeObject(target, node, {
+        mode: nodeMode,
+        activate: activateFlag,
         transportRequest,
         softwareComponent,
         backupPackageNames,
-        undefined,
         transportLayer,
-      );
+      });
       if (shouldActivate && node.adtType && isActivatable(node.type)) {
         return { name: node.name, type: node.adtType };
       }
@@ -311,17 +310,15 @@ export async function restoreTreeBackup(
         } else {
           logVerbose(2, `  [PACKAGE] ${node.name}`);
           try {
-            await restoreTreeNode(
-              client,
-              node,
-              effectiveMode,
-              false,
+            await writeObject(target, node, {
+              mode: effectiveMode,
+              activate: false,
               transportRequest,
               softwareComponent,
               backupPackageNames,
-              parentName || superPackageOverride,
+              superPackage: parentName || superPackageOverride,
               transportLayer,
-            );
+            });
           } catch (e) {
             if (isRootNode) {
               logVerbose(
