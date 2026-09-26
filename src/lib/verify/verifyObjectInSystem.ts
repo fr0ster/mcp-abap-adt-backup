@@ -3,6 +3,7 @@ import { readMetadataXmlForType } from '../backup/readMetadataXmlForType';
 import { readSourceText } from '../backup/readSourceText';
 import { decodeBase64 } from '../crypto/decodeBase64';
 import { canonicalizeMessageClass } from '../messageClass/canonicalizeMessageClass';
+import { readMessageClass } from '../messageClass/readMessageClass';
 import type { ParsedMessageClass } from '../messageClass/types';
 import type { ObjectSpec } from '../types';
 import { extractMetadata } from '../xml/extractMetadata';
@@ -27,11 +28,10 @@ export async function verifyObjectInSystem(
 
   try {
     if (spec.type === 'messageClass') {
-      const state = await client.getMessageClass().read({ name: spec.name });
-      if (!state?.messageClass) {
+      const system = await readMessageClass(client, spec.name);
+      if (!system) {
         return { ...base, status: 'missing' };
       }
-      const system = state.messageClass as ParsedMessageClass;
       if (system.packageName) {
         base.actualPackage = system.packageName;
       }

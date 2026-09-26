@@ -32,6 +32,7 @@ import { verifyBackupChecksum } from './crypto/verifyBackupChecksum';
 import { verifyTreeChecksums } from './crypto/verifyTreeChecksums';
 import { collectTreeDependencies } from './dependencies/collectTreeDependencies';
 import { canonicalizeMessageClass } from './messageClass/canonicalizeMessageClass';
+import { readMessageClass } from './messageClass/readMessageClass';
 import type { ParsedMessageClass } from './messageClass/types';
 import { analyzeDependencyLevels } from './restore/analyzeDependencies';
 import { isActivatable } from './restore/isActivatable';
@@ -729,13 +730,11 @@ async function dispatch(
       const label = formatObjectSpec(spec);
       const backupText = decodeBase64(node.codeBase64);
       if (node.type === 'messageClass') {
-        const state = await client.getMessageClass().read({ name: node.name });
+        const system = await readMessageClass(client, node.name);
         const backupCanon = canonicalizeMessageClass(
           JSON.parse(backupText) as ParsedMessageClass,
         );
-        const systemCanon = state?.messageClass
-          ? canonicalizeMessageClass(state.messageClass as ParsedMessageClass)
-          : '';
+        const systemCanon = system ? canonicalizeMessageClass(system) : '';
         await diffSource(label, backupCanon, systemCanon, showOk);
       } else if (node.codeFormat === 'xml') {
         const metadataXml = await readMetadataXmlForType(

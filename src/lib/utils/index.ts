@@ -6,5 +6,4 @@ export * from './normalizeType';
 export * from './objectId';
 export * from './parseBehaviorDefinitionFromClass';
 export * from './parseObjectSpec';
-export * from './responseToText';
 export * from './toBackupConfig';

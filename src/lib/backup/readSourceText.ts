@@ -1,150 +1,114 @@
 import type { AdtClient } from '@mcp-abap-adt/adt-clients';
+import { analyseException } from '@mcp-abap-adt/adt-strategies';
+import type { IAdtResponse } from '@mcp-abap-adt/interfaces-adt';
+import { readAnswer } from '../adt/answer';
 import type { ObjectSpec } from '../types';
-import { responseToText } from '../utils/responseToText';
 
+type Version = 'active' | 'inactive';
+
+/**
+ * The one source request for a type, or `undefined` when the type has no
+ * source of its own (its payload is a document — see readMetadataXmlForType).
+ */
+function readSourceRequest(
+  client: AdtClient,
+  spec: ObjectSpec,
+  version: Version,
+): Promise<IAdtResponse<unknown>> | undefined {
+  // `analyseException`: a read refused inside a 2xx as `exc:exception` is a
+  // failure with SAP's text, not a document to back up.
+  const o = { analyse: analyseException };
+  const name = spec.name;
+  switch (spec.type) {
+    case 'class':
+      return client.getClass().read({ className: name }, version, o);
+    case 'interface':
+      return client.getInterface().read({ interfaceName: name }, version, o);
+    case 'program':
+      return client.getProgram().read({ programName: name }, version, o);
+    case 'transformation':
+      return client
+        .getTransformation()
+        .read({ transformationName: name }, version, o);
+    case 'ddl':
+      return client.getDdl().read({ ddlName: name }, version, o);
+    case 'table':
+      return client.getTable().read({ tableName: name }, version, o);
+    case 'structure':
+      return client.getStructure().read({ structureName: name }, version, o);
+    case 'behaviorDefinition':
+      return client.getBehaviorDefinition().read({ name }, version, o);
+    case 'behaviorImplementation':
+      return client
+        .getBehaviorImplementation()
+        .read({ className: name }, version, o);
+    case 'serviceDefinition':
+      return client
+        .getServiceDefinition()
+        .read({ serviceDefinitionName: name }, version, o);
+    case 'metadataExtension':
+      return client.getMetadataExtension().read({ name }, version, o);
+    case 'functionModule':
+      if (!spec.functionGroupName) return undefined;
+      return client.getFunctionModule().read(
+        {
+          functionGroupName: spec.functionGroupName,
+          functionModuleName: name,
+        },
+        version,
+        o,
+      );
+    case 'functionInclude':
+      if (!spec.functionGroupName) return undefined;
+      return client
+        .getFunctionInclude()
+        .read(
+          { functionGroupName: spec.functionGroupName, includeName: name },
+          version,
+          o,
+        );
+    case 'enhancement':
+      return client
+        .getEnhancement()
+        .read({ enhancementName: name, enhancementType: 'enhoxh' }, version, o);
+    case 'accessControl':
+      return client
+        .getAccessControl()
+        .read({ accessControlName: name }, version, o);
+    case 'scalarFunction':
+      return client
+        .getScalarFunction()
+        .read({ scalarFunctionName: name }, version, o);
+    case 'scalarFunctionImplementation':
+      return client
+        .getScalarFunctionImplementation()
+        .read({ implementationName: name }, version, o);
+    case 'appendStructure':
+      return client
+        .getAppendStructure()
+        .read({ appendStructureName: name }, version, o);
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * The object's source text.
+ *
+ * - a string: the source;
+ * - `null`: nothing to take — a 404, or `200` with an empty body, which ADT
+ *   answers for a missing object and an empty one alike;
+ * - `undefined`: the type has no source (or a function-group child without its
+ *   group name).
+ *
+ * Any other failure throws with SAP's message.
+ */
 export async function readSourceText(
   client: AdtClient,
   spec: ObjectSpec,
-  version: 'active' | 'inactive' = 'active',
+  version: Version = 'active',
 ): Promise<string | null | undefined> {
-  try {
-    switch (spec.type) {
-      case 'class': {
-        const state = await client
-          .getClass()
-          .read({ className: spec.name }, version);
-        return responseToText(state?.readResult);
-      }
-      case 'interface': {
-        const state = await client
-          .getInterface()
-          .read({ interfaceName: spec.name }, version);
-        return responseToText(state?.readResult);
-      }
-      case 'program': {
-        const state = await client
-          .getProgram()
-          .read({ programName: spec.name }, version);
-        return responseToText(state?.readResult);
-      }
-      case 'transformation': {
-        const state = await client
-          .getTransformation()
-          .read({ transformationName: spec.name }, version);
-        return responseToText(state?.readResult);
-      }
-      case 'ddl': {
-        const state = await client
-          .getDdl()
-          .read({ ddlName: spec.name }, version);
-        return responseToText(state?.readResult);
-      }
-      case 'table': {
-        const state = await client
-          .getTable()
-          .read({ tableName: spec.name }, version);
-        return responseToText(state?.readResult);
-      }
-      case 'structure': {
-        const state = await client
-          .getStructure()
-          .read({ structureName: spec.name }, version);
-        return responseToText(state?.readResult);
-      }
-      case 'tableType': {
-        const state = await client
-          .getTableType()
-          .read({ tableTypeName: spec.name }, version);
-        return responseToText(state?.readResult);
-      }
-      case 'behaviorDefinition': {
-        const state = await client
-          .getBehaviorDefinition()
-          .read({ name: spec.name }, version);
-        return responseToText(state?.readResult);
-      }
-      case 'behaviorImplementation': {
-        const state = await client
-          .getBehaviorImplementation()
-          .read({ className: spec.name }, version);
-        return responseToText(state?.readResult);
-      }
-      case 'serviceDefinition': {
-        const state = await client
-          .getServiceDefinition()
-          .read({ serviceDefinitionName: spec.name }, version);
-        return responseToText(state?.readResult);
-      }
-      case 'metadataExtension': {
-        const state = await client
-          .getMetadataExtension()
-          .read({ name: spec.name }, version);
-        return responseToText(state?.readResult);
-      }
-      case 'functionModule': {
-        if (!spec.functionGroupName) return undefined;
-        const state = await client.getFunctionModule().read(
-          {
-            functionGroupName: spec.functionGroupName,
-            functionModuleName: spec.name,
-          },
-          version,
-        );
-        return responseToText(state?.readResult);
-      }
-      case 'functionInclude': {
-        if (!spec.functionGroupName) return undefined;
-        // read() returns the include source (adt-clients >= 5.8.0), consistent
-        // with class/program/functionModule.
-        const state = await client.getFunctionInclude().read(
-          {
-            functionGroupName: spec.functionGroupName,
-            includeName: spec.name,
-          },
-          version,
-        );
-        return responseToText(state?.readResult);
-      }
-      case 'enhancement': {
-        const state = await client
-          .getEnhancement()
-          .read(
-            { enhancementName: spec.name, enhancementType: 'enhoxh' },
-            version,
-          );
-        return responseToText(state?.readResult);
-      }
-      case 'accessControl': {
-        const state = await client
-          .getAccessControl()
-          .read({ accessControlName: spec.name }, version);
-        return responseToText(state?.readResult);
-      }
-      case 'scalarFunction': {
-        const state = await client
-          .getScalarFunction()
-          .read({ scalarFunctionName: spec.name }, version);
-        return responseToText(state?.readResult);
-      }
-      case 'scalarFunctionImplementation': {
-        const state = await client
-          .getScalarFunctionImplementation()
-          .read({ implementationName: spec.name }, version);
-        return responseToText(state?.readResult);
-      }
-      case 'appendStructure': {
-        const state = await client
-          .getAppendStructure()
-          .read({ appendStructureName: spec.name }, version);
-        return responseToText(state?.readResult);
-      }
-      default:
-        return undefined;
-    }
-  } catch (error: any) {
-    if (error.status === 404 || error.response?.status === 404) {
-      return null;
-    }
-    throw error;
-  }
+  const request = readSourceRequest(client, spec, version);
+  if (!request) return undefined;
+  return readAnswer(await request, `read source of ${spec.type} ${spec.name}`);
 }

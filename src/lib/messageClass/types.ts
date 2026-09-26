@@ -1,6 +1,6 @@
-// Local structural types for message-class JSON payloads. The adt-clients
-// IParsedMessage / IParsedMessageClass are not exported from the package root,
-// so we mirror the shape we depend on here.
+// The backup's message-class payload (stored as JSON). adt-clients reads no
+// message class for its caller since 23.0.0, so this is the backup's own shape,
+// filled by parseMessageClassXml.
 export interface ParsedMessage {
   msgno: string;
   msgtext: string;

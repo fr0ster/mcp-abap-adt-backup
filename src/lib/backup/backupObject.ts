@@ -3,6 +3,7 @@ import type {
   IFunctionGroupConfig,
   IServiceDefinitionConfig,
 } from '@mcp-abap-adt/interfaces-adt';
+import { readMessageClass } from '../messageClass/readMessageClass';
 import type { BackupConfig, BackupObject, ObjectSpec } from '../types';
 import { applyConfigName } from '../utils/applyConfigName';
 import { objectId } from '../utils/objectId';
@@ -296,11 +297,10 @@ export async function backupObject(
       };
     }
     case 'messageClass': {
-      const state = await client.getMessageClass().read({ name: spec.name });
-      if (!state?.messageClass) {
+      const mc = await readMessageClass(client, spec.name);
+      if (!mc) {
         throw new Error(`Message class not found: ${spec.name}`);
       }
-      const mc = state.messageClass;
       const config = applyConfigName(
         spec.type,
         spec.name,
