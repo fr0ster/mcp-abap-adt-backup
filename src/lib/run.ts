@@ -43,6 +43,7 @@ import { enrichTreeNode } from './tree/enrichTreeNode';
 import { findNodeInTree } from './tree/findNodeInTree';
 import { flattenTree } from './tree/flattenTree';
 import { getNodeObjectId } from './tree/getNodeObjectId';
+import { walkPackageTree } from './tree/walkPackage';
 import type {
   BackupFile,
   BackupObject,
@@ -234,13 +235,9 @@ async function dispatch(
     const output = typeof args.output === 'string' ? args.output : 'tree.yaml';
 
     logVerbose(1, `Fetching package hierarchy for ${packageName}`);
-    const hierarchy = await client
-      .getUtils()
-      .getPackageHierarchy(packageName.toUpperCase());
+    const hierarchy = await walkPackageTree(client, packageName);
     const rootTree: BackupTreeNode = {
       ...hierarchy,
-      type: hierarchy.type as SupportedType | undefined,
-      children: hierarchy.children as BackupTreeNode[] | undefined,
       restoreStatus: 'ok',
     };
     const enrichedRoot = await enrichTreeNode(rootTree, client, false);

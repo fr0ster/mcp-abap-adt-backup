@@ -10,6 +10,7 @@ import { extractMetadata } from '../xml/extractMetadata';
 import { parseAppendStructureSource } from '../xml/parseAppendStructureSource';
 import { parseScalarFunctionImplementationConfig } from '../xml/parseScalarFunctionImplementationConfig';
 import { buildConfigForNode } from './buildConfigForNode';
+import { functionGroupChildren } from './functionGroupChildren';
 import { isRestoreImplemented } from './isRestoreImplemented';
 import { mapAdtTypeToSupported } from './mapAdtTypeToSupported';
 import { readPayloadForType } from './readPayloadForType';
@@ -152,11 +153,13 @@ export async function enrichTreeNode(
   // developer content; regenerated on restore).
   const childNodes: BackupTreeNode[] = node.children ? [...node.children] : [];
   if (mappedType === 'functionGroup' && includeCode) {
-    const utils = client.getUtils();
-    const [fmNames, includeNames] = await Promise.all([
-      utils.listFunctionModules(node.name),
-      utils.listFunctionGroupIncludes(node.name),
-    ]);
+    // Sequential: one conversation, one request at a time.
+    const fmNames = await functionGroupChildren(client, node.name, 'FUGR/FF');
+    const includeNames = await functionGroupChildren(
+      client,
+      node.name,
+      'FUGR/I',
+    );
     const generatedCollector = `L${node.name.toUpperCase()}UXX`;
     const enumerated: BackupTreeNode[] = [
       ...fmNames.map((name) => ({ name, adtType: 'FUGR/FF' })),
