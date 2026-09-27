@@ -234,7 +234,8 @@ export async function run(): Promise<void> {
   }
 }
 
-async function dispatch(
+/** Runs one command on an open client. Exported for the offline tests. */
+export async function dispatch(
   command: string,
   args: Record<string, string | boolean | number>,
   client: AdtClient | undefined,
@@ -764,6 +765,7 @@ async function dispatch(
         codeBase64: Buffer.from(object.source, 'utf8').toString('base64'),
       } as BackupTreeNode);
     }
+    return;
   }
 
   if (command === 'validate') {

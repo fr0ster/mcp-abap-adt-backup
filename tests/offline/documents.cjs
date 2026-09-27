@@ -8,6 +8,12 @@ const { ok } = require('./answers.cjs');
 const { canonicalDocument } = require('../../dist/lib/xml/canonicalDocument');
 const { backupObject } = require('../../dist/lib/backup/backupObject');
 const { verifyObjectInSystem } = require('../../dist/lib/verify/verifyObjectInSystem');
+const { computeBackupChecksum } = require('../../dist/lib/crypto/computeBackupChecksum');
+const { dispatch } = require('../../dist/lib/run');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const YAML = require('yaml');
 
 const tableType = (rowType, stamp) =>
   '<?xml version="1.0" encoding="utf-8"?>' +
@@ -67,6 +73,45 @@ async function main() {
   );
   assert.strictEqual(resaved.status, 'ok', JSON.stringify(resaved));
   console.log('OK verify compares the definition');
+
+  // diff over a flat backup: every object compared, and the command ends
+  // there — it used to fall through to "Unknown command: diff".
+  const source = 'CLASS zcl_x DEFINITION.\nENDCLASS.';
+  const backup = {
+    schemaVersion: 1,
+    generatedAt: '2026-09-27T00:00:00Z',
+    objects: [
+      { id: 'class:ZCL_X', type: 'class', name: 'ZCL_X', config: {}, source },
+      { id: 'tableType:ZTT', type: 'tableType', name: 'ZTT', config: {}, source: xml },
+    ],
+  };
+  backup.checksum = computeBackupChecksum(backup);
+  const file = path.join(os.tmpdir(), `adt-backup-flat-${process.pid}.yaml`);
+  fs.writeFileSync(file, YAML.stringify(backup));
+  const printed = [];
+  const log = console.log;
+  console.log = (line) => printed.push(String(line));
+  try {
+    await dispatch(
+      'diff',
+      { input: file, all: true, 'show-ok': true },
+      {
+        getClass: () => ({ read: async () => ok(source) }),
+        getTableType: () => ({
+          readMetadata: async () => ok(tableType('ZNEW_ROW', '2026-09-27')),
+        }),
+      },
+      undefined,
+      undefined,
+    );
+  } finally {
+    console.log = log;
+    fs.rmSync(file, { force: true });
+  }
+  const out = printed.join('\n');
+  assert.match(out, /=== class:ZCL_X\nNo differences/, out);
+  assert.match(out, /=== tableType:ZTT[\s\S]*ZNEW_ROW/, out);
+  console.log('OK diff reads a flat backup and ends');
 }
 
 main().catch((error) => {
