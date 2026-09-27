@@ -313,8 +313,8 @@ function nodeStructure(nodes, types = []) {
     root: {
       name: 'ZROOT', adtType: 'DEVC/K',
       children: [
-        { name: 'ZFG', adtType: 'FUGR/F', functionGroupName: 'ZFG', children: [
-          { name: 'Z_FM', adtType: 'FUGR/FF', functionGroupName: 'ZFG' },
+        { name: 'ZFG', adtType: 'FUGR/F', type: 'functionGroup', functionGroupName: 'ZFG', children: [
+          { name: 'Z_FM', adtType: 'FUGR/FF', type: 'functionModule', functionGroupName: 'ZFG' },
         ] },
       ],
     },
@@ -443,6 +443,33 @@ function nodeStructure(nodes, types = []) {
     'the thrown error is the one reported',
   );
   assert.deepStrictEqual(log.map((s) => s.name), ['lock', 'update', 'unlock'], 'the unlock runs after a thrown publication');
+
+  // deletion targets: only what the tool restores; a published binding's
+  // generated artefacts have no ADT address and go with their binding
+  {
+    const { collectDeletionTargets } = require('../../dist/lib/restore/collectDeletionTargets');
+    const tree = {
+      name: 'ZPKG', adtType: 'DEVC/K', type: 'package',
+      children: [
+        { name: 'ZSB_X', adtType: 'SRVB/SVB', type: 'serviceBinding' },
+        { name: 'ZSB_X', adtType: 'G4BA' },
+        { name: 'ZSB_X_0001_G4BA', adtType: 'SCO2' },
+        { name: '11C9EDAD35555D36D246922ADAF5D5HT', adtType: 'SUSH' },
+        { name: 'ZFG', adtType: 'FUGR/F', type: 'functionGroup', children: [
+          { name: 'Z_FM', adtType: 'FUGR/FF', type: 'functionModule', functionGroupName: 'ZFG' },
+        ] },
+      ],
+    };
+    assert.deepStrictEqual(
+      collectDeletionTargets(tree),
+      [
+        { name: 'ZSB_X', type: 'SRVB/SVB' },
+        { name: 'ZFG', type: 'FUGR/F' },
+        { name: 'Z_FM', type: 'FUGR/FF', parentName: 'ZFG' },
+      ],
+      'the package, and what the system generated, are not deletion targets',
+    );
+  }
 
   console.log('OK sequences');
 })().catch((e) => { console.error(e); process.exit(1); });

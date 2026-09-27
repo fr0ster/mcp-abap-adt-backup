@@ -11,6 +11,7 @@ import {
   resolveSystemType,
 } from '../src/lib/connection/createConnection';
 import { typeOrder } from '../src/lib/constants/typeOrder';
+import { objectReference } from '../src/lib/restore/objectReference';
 import { flattenTree } from '../src/lib/tree/flattenTree';
 import { mapAdtTypeToSupported } from '../src/lib/tree/mapAdtTypeToSupported';
 import { walkPackageTree } from '../src/lib/tree/walkPackage';
@@ -60,9 +61,22 @@ async function run(): Promise<void> {
       const supported = mapAdtTypeToSupported(type);
       return supported ? (priority.get(supported) ?? -1) : -1;
     };
+    // Only what this tool restores: a walk also lists what the system
+    // generated for a published binding (G4BA, SCO2, SUSH), which has no ADT
+    // address — a deletion check over it refuses the whole group — and goes
+    // with its binding.
     const objects: IObjectReference[] = flattenTree(root)
-      .filter((n) => n.adtType && n.name)
-      .map((n) => ({ type: n.adtType as string, name: n.name }))
+      .filter(
+        (n) =>
+          n.adtType && n.name && mapAdtTypeToSupported(n.adtType) !== undefined,
+      )
+      .map((n) =>
+        objectReference({
+          name: n.name,
+          adtType: n.adtType as string,
+          functionGroupName: n.functionGroupName,
+        }),
+      )
       .sort((a, b) => orderOf(b.type) - orderOf(a.type));
 
     if (objects.length === 0) {
@@ -89,9 +103,7 @@ async function run(): Promise<void> {
       analyse: analyseDeletion,
     });
     if (!checked.ok) {
-      console.error(
-        `\nCANNOT DELETE: ${describeFailure(checked.getError())}`,
-      );
+      console.error(`\nCANNOT DELETE: ${describeFailure(checked.getError())}`);
       process.exitCode = 1;
       return;
     }
