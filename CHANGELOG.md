@@ -49,7 +49,7 @@ All notable changes to this project will be documented in this file.
 
 - README: a restore left incomplete exits with status 1; SAP's answers that mean
   something other than what they say (a `403` on a service binding's LOCK among
-  them) are pointed to adt-clients' troubleshooting, by object type, rather than
+  them) are pointed to adt-clients' SAP ADT errata (its object tree) rather than
   repeated here.
 - `README.md` and `docs/SMOKE_CHECKLIST.md` showed `verify --input` and `restore --input --mode upsert --force`, which the CLI no longer takes. They now show `plan` → `verify --plan` → `restore --plan`, give every online command its `--system-type`, and compare an `--objects` backup with `diff`, since only a package backup can be planned.
 

@@ -135,8 +135,9 @@ and exits with status 1.
 
 SAP's answers that mean something other than what they say — a `403` on a
 service binding's LOCK that is to be ignored, among others — are listed per
-object type in adt-clients'
-[TROUBLESHOOTING.md](https://github.com/fr0ster/mcp-abap-adt-clients/blob/main/docs/usage/TROUBLESHOOTING.md#by-object-type).
+object in adt-clients'
+[SAP ADT errata](https://github.com/fr0ster/mcp-abap-adt-clients/blob/main/docs/usage/ERRATA.md#the-object-tree)
+(also shipped in `@mcp-abap-adt/adt-strategies` as `ERRATA.md`).
 
 ## Upgrading from 2.0.0
 
