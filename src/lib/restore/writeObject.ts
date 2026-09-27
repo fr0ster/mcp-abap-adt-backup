@@ -3,16 +3,15 @@ import {
   analyseActivation,
   analyseException,
   analysePublication,
+  analysePublicationLock,
 } from '@mcp-abap-adt/adt-strategies';
-import {
-  ADT_NO_FAILURE,
-  type IAdtActivatable,
-  type IAdtCreatable,
-  type IAdtLockable,
-  type IAdtMetadataUpdatable,
-  type IAdtResponse,
-  type IAdtUpdatable,
-  type IAnalyse,
+import type {
+  IAdtActivatable,
+  IAdtCreatable,
+  IAdtLockable,
+  IAdtMetadataUpdatable,
+  IAdtResponse,
+  IAdtUpdatable,
 } from '@mcp-abap-adt/interfaces-adt';
 import { AdtCallError, describeFailure, requireOk } from '../adt/answer';
 import type { RestoreTarget } from '../adt/RestoreTarget';
@@ -795,11 +794,15 @@ async function writeServiceBinding(
   }
 
   // The publication runs under the binding's lock, as Eclipse runs it; the
-  // lock is released whatever the job answered. A lock an open editor holds
-  // is not a reason to stop: the publication does not need ours, and Eclipse
-  // itself carries on past its own 403 (measured).
+  // lock is released whatever the job answered. `analysePublicationLock`
+  // (adt-strategies) reads a 403 as no failure: an editing session holds the
+  // binding, the publication does not need our lock, and Eclipse itself carries
+  // on past its own 403 (see the errata shipped with adt-strategies).
   const handle = requireOk(
-    await binding.lock({ bindingName: name }, { analyse: editorHoldsLock }),
+    await binding.lock(
+      { bindingName: name },
+      { analyse: analysePublicationLock },
+    ),
     `lock serviceBinding ${name}`,
   );
   if (!handle) {
@@ -808,38 +811,41 @@ async function writeServiceBinding(
       `  [!] serviceBinding:${name} is locked by an editor; publishing without the lock`,
     );
   }
+  const what = `${desired === 'published' ? 'publish' : 'unpublish'} serviceBinding ${name}`;
+  // As in the write sequence: the unlock runs whatever happened to the job —
+  // a refusal or an exception thrown on the way. That first failure is the one
+  // reported, with a failed unlock logged beside it; after a publication that
+  // succeeded, a failed unlock is the failure — the lock may still be held.
+  let failure: unknown;
   try {
     const answer = await binding.update(
       { bindingName: name, desiredPublicationState: desired, serviceType },
       { analyse: analysePublication, timeout: PUBLICATION_TIMEOUT_MS },
     );
-    if (!answer.ok) {
-      throw new AdtCallError(
-        `${desired === 'published' ? 'publish' : 'unpublish'} serviceBinding ${name}`,
-        answer.getError(),
+    if (!answer.ok) failure = new AdtCallError(what, answer.getError());
+  } catch (error) {
+    failure = error;
+  }
+  if (!handle) {
+    if (failure !== undefined) throw failure;
+    return;
+  }
+  const unlocked = await binding.unlock(
+    { bindingName: name },
+    handle as string,
+    refused,
+  );
+  if (failure !== undefined) {
+    if (!unlocked.ok) {
+      logVerbose(
+        1,
+        `  [WARN] unlock serviceBinding ${name} failed after a failed ${desired === 'published' ? 'publish' : 'unpublish'}: ${describeFailure(unlocked.getError())}`,
       );
     }
-  } finally {
-    if (handle) {
-      await binding.unlock({ bindingName: name }, handle as string, refused);
-    }
+    throw failure;
   }
+  requireOk(unlocked, `unlock serviceBinding ${name}`);
 }
-
-/**
- * A binding's LOCK, read by `analyseException` — except the refusal an open
- * editor causes (`403`, "… is currently editing" / "You are already
- * editing"), which is no failure here: the publication goes ahead without a
- * lock of ours. Any other 403 — an authorization, say — stays a refusal.
- */
-const editorHoldsLock: IAnalyse = (verdict, answer) => {
-  const judged = analyseException(verdict, answer);
-  if (judged === ADT_NO_FAILURE) return judged;
-  const text = `${judged.message}\n${String(judged.response?.data ?? '')}`;
-  return judged.response?.status === 403 && /editing/i.test(text)
-    ? ADT_NO_FAILURE
-    : judged;
-};
 
 /**
  * How long a publication job may take. Measured at 133 s on an idle system

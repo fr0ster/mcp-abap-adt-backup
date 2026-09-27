@@ -130,6 +130,15 @@ the sequences are this tool's:
 - where-used reads the scope, selects every type and searches with it (without a
   scope resource, it searches unscoped).
 
+A restore that leaves an object failed or inactive prints `Restore incomplete: …`
+and exits with status 1.
+
+SAP's answers that mean something other than what they say — a `403` on a
+service binding's LOCK that is to be ignored, among others — are listed per
+object in adt-clients'
+[SAP ADT errata](https://github.com/fr0ster/mcp-abap-adt-clients/blob/main/docs/usage/ERRATA.md#the-object-tree)
+(also shipped in `@mcp-abap-adt/adt-strategies` as `ERRATA.md`).
+
 ## Upgrading from 2.0.0
 
 - Node.js 22 or 24 is required.

@@ -392,18 +392,57 @@ function nodeStructure(nodes, types = []) {
   assert.deepStrictEqual(log.map((s) => s.name), ['lock', 'update'], 'an editor-held lock: publish without it, nothing to unlock');
 
   log = [];
-  const denied = { origin: 'connection', message: 'No authorization for S_DEVELOP', response: { status: 403, data: '' } };
-  const deniedHandler = fakeHandler(log, {
+  const stale = { origin: 'connection', message: 'Request failed with status code 423', response: { status: 423, data: '' } };
+  const staleHandler = fakeHandler(log, {
     lock: async (_config, options) => {
-      const judged = options.analyse(denied, undefined);
+      const judged = options.analyse(stale, undefined);
       return judged === 'adt:no-failure' ? ok('') : { ok: false, getError: () => judged };
     },
   });
   await assert.rejects(
-    writeObject(targetWith('getServiceBinding', deniedHandler), bindingNode, { mode: 'update', activate: false }),
+    writeObject(targetWith('getServiceBinding', staleHandler), bindingNode, { mode: 'update', activate: false }),
     /lock serviceBinding ZSB_X/,
-    'any other 403 still stops the publication',
+    'a refusal other than 403 still stops the publication',
   );
+
+  // the unlock after a publication is judged too
+  log = [];
+  await assert.rejects(
+    writeObject(
+      targetWith('getServiceBinding', fakeHandler(log, { unlock: async () => fail(500, 'unlock failed') })),
+      { ...bindingNode },
+      { mode: 'update', activate: false },
+    ),
+    /unlock serviceBinding ZSB_X/,
+    'a failed unlock after a successful publication is a failure',
+  );
+  log = [];
+  await assert.rejects(
+    writeObject(
+      targetWith('getServiceBinding', fakeHandler(log, {
+        update: async () => fail(200, 'Local Publish of ZSB_X failed'),
+        unlock: async () => fail(500, 'unlock failed'),
+      })),
+      { ...bindingNode },
+      { mode: 'update', activate: false },
+    ),
+    /publish serviceBinding ZSB_X/,
+    'when both fail, the publication is the error reported',
+  );
+  assert.deepStrictEqual(log.map((s) => s.name), ['lock', 'update', 'unlock'], 'the unlock still ran');
+
+  // an exception thrown during the publication still releases the lock
+  log = [];
+  await assert.rejects(
+    writeObject(
+      targetWith('getServiceBinding', fakeHandler(log, { update: async () => { throw new TypeError('reading the job answer blew up'); } })),
+      { ...bindingNode },
+      { mode: 'update', activate: false },
+    ),
+    /reading the job answer blew up/,
+    'the thrown error is the one reported',
+  );
+  assert.deepStrictEqual(log.map((s) => s.name), ['lock', 'update', 'unlock'], 'the unlock runs after a thrown publication');
 
   console.log('OK sequences');
 })().catch((e) => { console.error(e); process.exit(1); });
