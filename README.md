@@ -5,7 +5,7 @@ CLI for recursive ADT backups and restores using `@mcp-abap-adt/adt-clients`.
 
 ## Installation
 
-Requires Node.js 22 or 24.
+Requires Node.js 22, 24 or 26.
 
 ```bash
 npm install -g @mcp-abap-adt/adt-backup
@@ -144,7 +144,7 @@ object in adt-clients'
 2.0.0 was released on GitHub only; the npm registry went from 1.7.0 to 3.0.0.
 
 - The licence is `GPL-3.0-only` from 2.0.0 on (1.7.0 and earlier stay MIT).
-- Node.js 22 or 24 is required.
+- Node.js 22, 24 or 26 is required.
 - Pass `--system-type cloud|onprem|legacy` (or set `SAP_SYSTEM_TYPE`) on every
   command that connects; there is no default.
 - Backups keep their format. New backups record table types as `xml` (they always

@@ -120,7 +120,7 @@ Message classes (`messageClass`, `MSAG/N`) are the exception: they store parsed 
 - Respond to the user in the language they use to communicate
 - Biome for linting/formatting (2-space indent, single quotes, semicolons)
 - TypeScript strict mode, target es2022, CommonJS output
-- Node.js 22 or 24 (`engines.node: ^22 || ^24`, as auth-broker 3 requires); CI and release build on Node 22
+- Node.js 22, 24 or 26 (`engines.node: ^22 || ^24 || ^26`, as auth-broker); CI and release build on Node 22
 - `noExplicitAny`: warn in production, off in tests
 - Biome also handles import organization (`organizeImports: on`)
 

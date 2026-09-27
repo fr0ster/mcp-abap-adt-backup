@@ -4,7 +4,7 @@
 `@mcp-abap-adt/adt-backup` is a CLI tool for performing recursive backups and restores of SAP ABAP objects using the ADT (ABAP Development Tools) interfaces. It interacts with SAP systems to serialize packages and their contents into YAML/XML formats and can restore them back to a system.
 
 ## Tech Stack
-- **Language:** TypeScript (Node.js 22 or 24)
+- **Language:** TypeScript (Node.js 22, 24 or 26)
 - **Build System:** `tsc` (TypeScript Compiler)
 - **Linting/Formatting:** Biome (`biome.json`)
 - **Dependencies:**
