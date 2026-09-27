@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-09-27
+
+Moves to `@mcp-abap-adt/adt-clients` 23, which makes one request per call and
+composes nothing: the sequences are this tool's now. **Breaking**: Node.js 22 or
+24, and `--system-type` on every command that connects — see *Upgrading* in the
+README. On npm this follows 1.7.0; 2.0.0 (the licence change) was released on
+GitHub only.
+
 ### BREAKING
 
 - **Node.js 22 or 24** (`engines.node: ^22 || ^24`), as `@mcp-abap-adt/auth-broker` 3 requires.
