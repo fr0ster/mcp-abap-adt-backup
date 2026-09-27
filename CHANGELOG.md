@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [3.0.1] - 2026-09-27
+
 ### Fixed
 
 - **Deleting a package that held a published service binding refused
