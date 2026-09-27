@@ -139,8 +139,11 @@ object in adt-clients'
 [SAP ADT errata](https://github.com/fr0ster/mcp-abap-adt-clients/blob/main/docs/usage/ERRATA.md#the-object-tree)
 (also shipped in `@mcp-abap-adt/adt-strategies` as `ERRATA.md`).
 
-## Upgrading from 2.0.0
+## Upgrading from 1.7.0 or 2.0.0
 
+2.0.0 was released on GitHub only; the npm registry went from 1.7.0 to 3.0.0.
+
+- The licence is `GPL-3.0-only` from 2.0.0 on (1.7.0 and earlier stay MIT).
 - Node.js 22 or 24 is required.
 - Pass `--system-type cloud|onprem|legacy` (or set `SAP_SYSTEM_TYPE`) on every
   command that connects; there is no default.
