@@ -6,6 +6,10 @@ All notable changes to this project will be documented in this file.
 
 ## [3.0.4] - 2026-09-27
 
+### Added
+
+- **`-v` as the first argument prints the version**, like `version` and `--version`: `help` / `--help` / `-h` and `version` / `--version` / `-v` — the same set in every CLI of the family, each answering before anything starts or connects. After a command, `-v` stays a verbosity level.
+
 ### Fixed
 
 - **3.0.0 to 3.0.3 on npm carried a stale build.** Nothing built the package

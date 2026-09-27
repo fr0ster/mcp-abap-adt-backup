@@ -78,8 +78,8 @@ function packageVersion(): string {
 export async function run(): Promise<void> {
   const argv = process.argv.slice(2);
   // Before anything reads options or connects: the version answers alone.
-  // Not `-v`: that is a verbosity level here.
-  if (argv[0] === 'version' || argv[0] === '--version') {
+  // `-v` only as the first argument; after a command it is a verbosity level.
+  if (argv[0] === 'version' || argv[0] === '--version' || argv[0] === '-v') {
     console.log(packageVersion());
     process.exit(0);
   }
