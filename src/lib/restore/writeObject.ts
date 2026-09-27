@@ -4,13 +4,15 @@ import {
   analyseException,
   analysePublication,
 } from '@mcp-abap-adt/adt-strategies';
-import type {
-  IAdtActivatable,
-  IAdtCreatable,
-  IAdtLockable,
-  IAdtMetadataUpdatable,
-  IAdtResponse,
-  IAdtUpdatable,
+import {
+  ADT_NO_FAILURE,
+  type IAdtActivatable,
+  type IAdtCreatable,
+  type IAdtLockable,
+  type IAdtMetadataUpdatable,
+  type IAdtResponse,
+  type IAdtUpdatable,
+  type IAnalyse,
 } from '@mcp-abap-adt/interfaces-adt';
 import { AdtCallError, describeFailure, requireOk } from '../adt/answer';
 import type { RestoreTarget } from '../adt/RestoreTarget';
@@ -793,11 +795,19 @@ async function writeServiceBinding(
   }
 
   // The publication runs under the binding's lock, as Eclipse runs it; the
-  // lock is released whatever the job answered.
+  // lock is released whatever the job answered. A lock an open editor holds
+  // is not a reason to stop: the publication does not need ours, and Eclipse
+  // itself carries on past its own 403 (measured).
   const handle = requireOk(
-    await binding.lock({ bindingName: name }, refused),
+    await binding.lock({ bindingName: name }, { analyse: editorHoldsLock }),
     `lock serviceBinding ${name}`,
   );
+  if (!handle) {
+    logVerbose(
+      1,
+      `  [!] serviceBinding:${name} is locked by an editor; publishing without the lock`,
+    );
+  }
   try {
     const answer = await binding.update(
       { bindingName: name, desiredPublicationState: desired, serviceType },
@@ -810,9 +820,26 @@ async function writeServiceBinding(
       );
     }
   } finally {
-    await binding.unlock({ bindingName: name }, handle as string, refused);
+    if (handle) {
+      await binding.unlock({ bindingName: name }, handle as string, refused);
+    }
   }
 }
+
+/**
+ * A binding's LOCK, read by `analyseException` — except the refusal an open
+ * editor causes (`403`, "… is currently editing" / "You are already
+ * editing"), which is no failure here: the publication goes ahead without a
+ * lock of ours. Any other 403 — an authorization, say — stays a refusal.
+ */
+const editorHoldsLock: IAnalyse = (verdict, answer) => {
+  const judged = analyseException(verdict, answer);
+  if (judged === ADT_NO_FAILURE) return judged;
+  const text = `${judged.message}\n${String(judged.response?.data ?? '')}`;
+  return judged.response?.status === 403 && /editing/i.test(text)
+    ? ADT_NO_FAILURE
+    : judged;
+};
 
 /**
  * How long a publication job may take. Measured at 133 s on an idle system
