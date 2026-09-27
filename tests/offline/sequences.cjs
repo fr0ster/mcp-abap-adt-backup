@@ -392,17 +392,17 @@ function nodeStructure(nodes, types = []) {
   assert.deepStrictEqual(log.map((s) => s.name), ['lock', 'update'], 'an editor-held lock: publish without it, nothing to unlock');
 
   log = [];
-  const denied = { origin: 'connection', message: 'No authorization for S_DEVELOP', response: { status: 403, data: '' } };
-  const deniedHandler = fakeHandler(log, {
+  const stale = { origin: 'connection', message: 'Request failed with status code 423', response: { status: 423, data: '' } };
+  const staleHandler = fakeHandler(log, {
     lock: async (_config, options) => {
-      const judged = options.analyse(denied, undefined);
+      const judged = options.analyse(stale, undefined);
       return judged === 'adt:no-failure' ? ok('') : { ok: false, getError: () => judged };
     },
   });
   await assert.rejects(
-    writeObject(targetWith('getServiceBinding', deniedHandler), bindingNode, { mode: 'update', activate: false }),
+    writeObject(targetWith('getServiceBinding', staleHandler), bindingNode, { mode: 'update', activate: false }),
     /lock serviceBinding ZSB_X/,
-    'any other 403 still stops the publication',
+    'a refusal other than 403 still stops the publication',
   );
 
   console.log('OK sequences');
