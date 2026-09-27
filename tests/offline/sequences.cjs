@@ -405,5 +405,31 @@ function nodeStructure(nodes, types = []) {
     'a refusal other than 403 still stops the publication',
   );
 
+  // the unlock after a publication is judged too
+  log = [];
+  await assert.rejects(
+    writeObject(
+      targetWith('getServiceBinding', fakeHandler(log, { unlock: async () => fail(500, 'unlock failed') })),
+      { ...bindingNode },
+      { mode: 'update', activate: false },
+    ),
+    /unlock serviceBinding ZSB_X/,
+    'a failed unlock after a successful publication is a failure',
+  );
+  log = [];
+  await assert.rejects(
+    writeObject(
+      targetWith('getServiceBinding', fakeHandler(log, {
+        update: async () => fail(200, 'Local Publish of ZSB_X failed'),
+        unlock: async () => fail(500, 'unlock failed'),
+      })),
+      { ...bindingNode },
+      { mode: 'update', activate: false },
+    ),
+    /publish serviceBinding ZSB_X/,
+    'when both fail, the publication is the error reported',
+  );
+  assert.deepStrictEqual(log.map((s) => s.name), ['lock', 'update', 'unlock'], 'the unlock still ran');
+
   console.log('OK sequences');
 })().catch((e) => { console.error(e); process.exit(1); });

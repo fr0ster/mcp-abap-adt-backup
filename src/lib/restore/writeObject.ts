@@ -811,22 +811,34 @@ async function writeServiceBinding(
       `  [!] serviceBinding:${name} is locked by an editor; publishing without the lock`,
     );
   }
-  try {
-    const answer = await binding.update(
-      { bindingName: name, desiredPublicationState: desired, serviceType },
-      { analyse: analysePublication, timeout: PUBLICATION_TIMEOUT_MS },
-    );
-    if (!answer.ok) {
-      throw new AdtCallError(
-        `${desired === 'published' ? 'publish' : 'unpublish'} serviceBinding ${name}`,
-        answer.getError(),
+  const what = `${desired === 'published' ? 'publish' : 'unpublish'} serviceBinding ${name}`;
+  const answer = await binding.update(
+    { bindingName: name, desiredPublicationState: desired, serviceType },
+    { analyse: analysePublication, timeout: PUBLICATION_TIMEOUT_MS },
+  );
+  // As in the write sequence: the unlock runs whatever the job answered. A
+  // failed publication is the error reported, with a failed unlock logged
+  // beside it; after a publication that succeeded, a failed unlock is the
+  // failure — the lock may still be held.
+  if (!handle) {
+    if (!answer.ok) throw new AdtCallError(what, answer.getError());
+    return;
+  }
+  const unlocked = await binding.unlock(
+    { bindingName: name },
+    handle as string,
+    refused,
+  );
+  if (!answer.ok) {
+    if (!unlocked.ok) {
+      logVerbose(
+        1,
+        `  [WARN] unlock serviceBinding ${name} failed after a failed ${desired === 'published' ? 'publish' : 'unpublish'}: ${describeFailure(unlocked.getError())}`,
       );
     }
-  } finally {
-    if (handle) {
-      await binding.unlock({ bindingName: name }, handle as string, refused);
-    }
+    throw new AdtCallError(what, answer.getError());
   }
+  requireOk(unlocked, `unlock serviceBinding ${name}`);
 }
 
 /**
