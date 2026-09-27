@@ -130,6 +130,35 @@ the sequences are this tool's:
 - where-used reads the scope, selects every type and searches with it (without a
   scope resource, it searches unscoped).
 
+A restore that leaves an object failed or inactive prints `Restore incomplete: …`
+and exits with status 1.
+
+### Service bindings: what SAP answers, and what restore does with it
+
+A binding is restored as create → **activate** → lock → publish → unlock. Three
+of SAP's answers on this path say something other than what they mean:
+
+- **`403` on the LOCK is not a refusal.** It means an editing session holds the
+  binding — typically an Eclipse editor someone has open; Eclipse keeps the lock
+  after a publication until the editor closes. The publication job does not need
+  the lock, and Eclipse itself posts the job after its own LOCK's `403`. Restore
+  therefore carries on, prints
+  `serviceBinding:<name> is locked by an editor; publishing without the lock`,
+  and sends no UNLOCK. Any other `403` — an authorization, say — still stops it.
+- **"Service Binding … does not exist" on a publish means "not active".** A
+  binding just created has no active version; the publication answers `200` with
+  this text. Restore activates the binding first.
+- **An unpublish right after a publish is refused** — `200` with *"Error while
+  creating service interface <BINDING>_0001_G4BA"*, within a second. The system
+  is still finishing the publication; the same request minutes later succeeds.
+  Restore reports it as a failure (exit status 1); run it again later.
+
+A publication job takes about two minutes on an idle system and longer on a
+loaded one; restore waits up to 15 minutes for its answer.
+
+The measurements behind each point are in adt-clients'
+[WORKAROUNDS.md](https://github.com/fr0ster/mcp-abap-adt-clients/blob/main/docs/usage/WORKAROUNDS.md#a-service-binding-is-locked-to-publish-it).
+
 ## Upgrading from 2.0.0
 
 - Node.js 22 or 24 is required.
