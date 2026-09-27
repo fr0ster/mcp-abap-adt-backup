@@ -812,16 +812,22 @@ async function writeServiceBinding(
     );
   }
   const what = `${desired === 'published' ? 'publish' : 'unpublish'} serviceBinding ${name}`;
-  const answer = await binding.update(
-    { bindingName: name, desiredPublicationState: desired, serviceType },
-    { analyse: analysePublication, timeout: PUBLICATION_TIMEOUT_MS },
-  );
-  // As in the write sequence: the unlock runs whatever the job answered. A
-  // failed publication is the error reported, with a failed unlock logged
-  // beside it; after a publication that succeeded, a failed unlock is the
-  // failure — the lock may still be held.
+  // As in the write sequence: the unlock runs whatever happened to the job —
+  // a refusal or an exception thrown on the way. That first failure is the one
+  // reported, with a failed unlock logged beside it; after a publication that
+  // succeeded, a failed unlock is the failure — the lock may still be held.
+  let failure: unknown;
+  try {
+    const answer = await binding.update(
+      { bindingName: name, desiredPublicationState: desired, serviceType },
+      { analyse: analysePublication, timeout: PUBLICATION_TIMEOUT_MS },
+    );
+    if (!answer.ok) failure = new AdtCallError(what, answer.getError());
+  } catch (error) {
+    failure = error;
+  }
   if (!handle) {
-    if (!answer.ok) throw new AdtCallError(what, answer.getError());
+    if (failure !== undefined) throw failure;
     return;
   }
   const unlocked = await binding.unlock(
@@ -829,14 +835,14 @@ async function writeServiceBinding(
     handle as string,
     refused,
   );
-  if (!answer.ok) {
+  if (failure !== undefined) {
     if (!unlocked.ok) {
       logVerbose(
         1,
         `  [WARN] unlock serviceBinding ${name} failed after a failed ${desired === 'published' ? 'publish' : 'unpublish'}: ${describeFailure(unlocked.getError())}`,
       );
     }
-    throw new AdtCallError(what, answer.getError());
+    throw failure;
   }
   requireOk(unlocked, `unlock serviceBinding ${name}`);
 }

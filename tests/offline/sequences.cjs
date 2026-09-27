@@ -431,5 +431,18 @@ function nodeStructure(nodes, types = []) {
   );
   assert.deepStrictEqual(log.map((s) => s.name), ['lock', 'update', 'unlock'], 'the unlock still ran');
 
+  // an exception thrown during the publication still releases the lock
+  log = [];
+  await assert.rejects(
+    writeObject(
+      targetWith('getServiceBinding', fakeHandler(log, { update: async () => { throw new TypeError('reading the job answer blew up'); } })),
+      { ...bindingNode },
+      { mode: 'update', activate: false },
+    ),
+    /reading the job answer blew up/,
+    'the thrown error is the one reported',
+  );
+  assert.deepStrictEqual(log.map((s) => s.name), ['lock', 'update', 'unlock'], 'the unlock runs after a thrown publication');
+
   console.log('OK sequences');
 })().catch((e) => { console.error(e); process.exit(1); });
