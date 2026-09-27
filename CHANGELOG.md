@@ -47,12 +47,10 @@ All notable changes to this project will be documented in this file.
 
 ### Documentation
 
-- README, *Service bindings: what SAP answers, and what restore does with it*.
-  SAP says three things there that it does not mean: a `403` on the binding's
-  LOCK (an editor holds it; the publication goes ahead), "does not exist" on a
-  publish (the binding is not active yet), and an unpublish refused right after
-  a publish (the system is still finishing; later it succeeds). What restore
-  does about each, and that a restore left incomplete exits 1.
+- README: a restore left incomplete exits with status 1; SAP's answers that mean
+  something other than what they say (a `403` on a service binding's LOCK among
+  them) are pointed to adt-clients' troubleshooting, by object type, rather than
+  repeated here.
 - `README.md` and `docs/SMOKE_CHECKLIST.md` showed `verify --input` and `restore --input --mode upsert --force`, which the CLI no longer takes. They now show `plan` → `verify --plan` → `restore --plan`, give every online command its `--system-type`, and compare an `--objects` backup with `diff`, since only a package backup can be planned.
 
 ### Tests
