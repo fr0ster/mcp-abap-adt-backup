@@ -196,7 +196,7 @@ export function usage(command?: string): string {
     '  validate  Validate backup checksums',
     '  extract   Write the code of one object in a backup to a file',
     '  patch     Replace the code of one object in a backup from a file',
-    '  version   Print the version (also --version)',
+    '  version   Print the version (also --version, -v)',
     '',
     'Run "adt-backup <command> --help" for command-specific options.',
     '',

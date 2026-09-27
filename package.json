@@ -1,6 +1,6 @@
 {
   "name": "@mcp-abap-adt/adt-backup",
-  "version": "3.0.3",
+  "version": "3.0.4",
   "description": "ADT backup CLI for SAP ABAP objects (recursive package backups and restores)",
   "main": "dist/bin/adt-backup.js",
   "types": "dist/bin/adt-backup.d.ts",
@@ -42,7 +42,8 @@
     "build:fast": "npx tsc -p tsconfig.json && chmod +x dist/bin/adt-backup.js",
     "test:integration": "node scripts/integration-test.mjs",
     "test:offline": "node tests/offline/messageclass.cjs && node tests/offline/sequences.cjs && node tests/offline/documents.cjs",
-    "delete:package": "npx ts-node scripts/delete-package.ts"
+    "delete:package": "npx ts-node scripts/delete-package.ts",
+    "prepack": "npm run build"
   },
   "engines": {
     "node": "^22 || ^24 || ^26"

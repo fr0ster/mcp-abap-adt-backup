@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [3.0.4] - 2026-09-27
+
+### Added
+
+- **`-v` as the first argument prints the version**, like `version` and `--version`: `help` / `--help` / `-h` and `version` / `--version` / `-v` — the same set in every CLI of the family, each answering before anything starts or connects. After a command, `-v` stays a verbosity level.
+
+### Fixed
+
+- **3.0.0 to 3.0.3 on npm carried a stale build.** Nothing built the package
+  before publishing, so `npm publish` shipped whatever `dist/` lay in the working
+  tree — a build made when #14 was merged. None of the four published packages
+  has what came after it: the service-binding lock read by
+  `analysePublicationLock` and the unlock judged after a publication (3.0.0),
+  the package deletion that skips a binding's generated objects (3.0.1), or
+  `adt-backup version` (3.0.3). `prepack` now runs `npm run build`, so both
+  `npm pack` and `npm publish` ship the code of their own commit. This release is the first whose package holds all of it.
+
 ## [3.0.3] - 2026-09-27
 
 ### Added
