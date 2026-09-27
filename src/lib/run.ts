@@ -66,7 +66,7 @@ import { parseObjectSpec } from './utils/parseObjectSpec';
 import { collectBackupNodes } from './verify/collectBackupNodes';
 import { formatVerifyResultsText } from './verify/formatVerifyResultsText';
 import { verifyBackup } from './verify/verifyBackup';
-import { extractMetadata } from './xml/extractMetadata';
+import { canonicalDocument } from './xml/canonicalDocument';
 
 export async function run(): Promise<void> {
   const argv = process.argv.slice(2);
@@ -654,15 +654,17 @@ async function dispatch(
       metadataXml: string,
       showNoDiff: boolean,
     ) => {
-      const beforeMeta = extractMetadata(backupText);
-      const afterMeta = extractMetadata(metadataXml);
-      if (beforeMeta.packageName === afterMeta.packageName) {
+      // The whole definition, not the package alone: a document's row type,
+      // keys, value table or labels are what a restore writes back.
+      const unified = diffUnified(
+        canonicalDocument(backupText),
+        canonicalDocument(metadataXml),
+      );
+      if (!unified.trim()) {
         if (showNoDiff) console.log(`=== ${label}\nNo differences`);
         return false;
       }
-      console.log(
-        `=== ${label}\nchanged packageName: "${beforeMeta.packageName ?? ''}" -> "${afterMeta.packageName ?? ''}"`,
-      );
+      console.log(`=== ${label}\n${unified}`);
       return true;
     };
 
@@ -731,7 +733,37 @@ async function dispatch(
       }
       return;
     }
-    return;
+
+    // A flat `--objects` backup (schema 1) carries each object's source as
+    // is — a table type's is its document. It used to fall through here and
+    // print nothing at all, which read as "no differences".
+    const wanted = diffAll ? undefined : parseObjectSpec(objectSpecValue);
+    const objects = parsed.objects.filter(
+      (o) =>
+        !wanted ||
+        (o.type === wanted.type &&
+          o.name.toUpperCase() === wanted.name.toUpperCase() &&
+          (!wanted.functionGroupName ||
+            o.functionGroupName?.toUpperCase() ===
+              wanted.functionGroupName.toUpperCase())),
+    );
+    if (wanted && objects.length === 0) throw new Error('Object not found');
+    for (const object of objects) {
+      if (object.source === undefined) {
+        if (showOk)
+          console.log(
+            `=== ${object.type}:${object.name}\nNot compared: the backup holds no content for it`,
+          );
+        continue;
+      }
+      await diffNode({
+        name: object.name,
+        type: object.type,
+        functionGroupName: object.functionGroupName,
+        codeFormat: object.type === 'tableType' ? 'xml' : undefined,
+        codeBase64: Buffer.from(object.source, 'utf8').toString('base64'),
+      } as BackupTreeNode);
+    }
   }
 
   if (command === 'validate') {

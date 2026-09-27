@@ -116,6 +116,29 @@ export async function backupObject(
         ),
       };
     }
+    case 'tableType': {
+      // A table type has no source: it is its document — row type, keys,
+      // access — and the document is what is kept, whole.
+      const metadataXml = await readMetadataXmlForType(
+        client,
+        spec.type,
+        spec.name,
+      );
+      if (!metadataXml) {
+        throw new Error(`Table type not found: ${spec.name}`);
+      }
+      const basic = extractMetadata(metadataXml);
+      return {
+        id,
+        type: spec.type,
+        name: spec.name,
+        config: applyConfigName(spec.type, spec.name, undefined, {
+          packageName: basic.packageName,
+          description: basic.description,
+        }),
+        source: metadataXml,
+      };
+    }
     case 'serviceDefinition': {
       const metadataXml = await readMetadataXmlForType(
         client,

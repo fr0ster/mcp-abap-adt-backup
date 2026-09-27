@@ -41,7 +41,7 @@
     "build": "npm run --silent clean && npx biome check src --diagnostic-level=error && npx tsc -p tsconfig.json && chmod +x dist/bin/adt-backup.js",
     "build:fast": "npx tsc -p tsconfig.json && chmod +x dist/bin/adt-backup.js",
     "test:integration": "node scripts/integration-test.mjs",
-    "test:offline": "node tests/offline/messageclass.cjs && node tests/offline/sequences.cjs",
+    "test:offline": "node tests/offline/messageclass.cjs && node tests/offline/sequences.cjs && node tests/offline/documents.cjs",
     "delete:package": "npx ts-node scripts/delete-package.ts"
   },
   "engines": {
