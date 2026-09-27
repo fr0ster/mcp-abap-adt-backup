@@ -16,7 +16,7 @@
 - `npm run clean`: remove `dist/` and `tsconfig.tsbuildinfo`.
 
 ## Coding Style & Naming Conventions
-- Language: TypeScript (Node.js 22 or 24), compiled with `tsconfig.json`.
+- Language: TypeScript (Node.js 22, 24 or 26), compiled with `tsconfig.json`.
 - Formatting/linting: Biome (`biome.json`); run `npm run lint` before committing.
 - Favor explicit, descriptive names (e.g., `backupObject`, `restoreTreeBackup`).
 - CLI commands are lowercase (e.g., `backup`, `restore`); object selectors use `type:name` (e.g., `class:ZCL_TEST`).
