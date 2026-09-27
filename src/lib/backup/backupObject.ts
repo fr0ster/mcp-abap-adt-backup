@@ -1,9 +1,6 @@
-import type {
-  AdtClient,
-  IFunctionGroupConfig,
-  IServiceDefinitionConfig,
-} from '@mcp-abap-adt/adt-clients';
-import type { BackupConfig, BackupObject, ObjectSpec } from '../types';
+import type { AdtClient } from '@mcp-abap-adt/adt-clients';
+import { readMessageClass } from '../messageClass/readMessageClass';
+import type { BackupObject, ObjectSpec } from '../types';
 import { applyConfigName } from '../utils/applyConfigName';
 import { objectId } from '../utils/objectId';
 import { parseBehaviorDefinitionFromClass } from '../utils/parseBehaviorDefinitionFromClass';
@@ -106,7 +103,7 @@ export async function backupObject(
         functionGroupName: spec.name,
         packageName: metadata.packageName,
         description: metadata.description,
-      } as Partial<IFunctionGroupConfig>;
+      };
       return {
         id,
         type: spec.type,
@@ -117,6 +114,29 @@ export async function backupObject(
           undefined,
           toBackupConfig(config),
         ),
+      };
+    }
+    case 'tableType': {
+      // A table type has no source: it is its document — row type, keys,
+      // access — and the document is what is kept, whole.
+      const metadataXml = await readMetadataXmlForType(
+        client,
+        spec.type,
+        spec.name,
+      );
+      if (!metadataXml) {
+        throw new Error(`Table type not found: ${spec.name}`);
+      }
+      const basic = extractMetadata(metadataXml);
+      return {
+        id,
+        type: spec.type,
+        name: spec.name,
+        config: applyConfigName(spec.type, spec.name, undefined, {
+          packageName: basic.packageName,
+          description: basic.description,
+        }),
+        source: metadataXml,
       };
     }
     case 'serviceDefinition': {
@@ -133,7 +153,7 @@ export async function backupObject(
         serviceDefinitionName: spec.name,
         packageName: metadata.packageName,
         description: metadata.description,
-      } as Partial<IServiceDefinitionConfig>;
+      };
       const source = await readSourceText(client, spec);
       return {
         id,
@@ -227,7 +247,7 @@ export async function backupObject(
           functionModuleName: spec.name,
           packageName: basic.packageName,
           description: basic.description,
-        } as BackupConfig,
+        },
       );
       return {
         id,
@@ -257,7 +277,7 @@ export async function backupObject(
           implementationName: spec.name,
           scalarFunctionName: sfi.scalarFunctionName,
           engineValue: sfi.engineValue ?? 'sqlEngine',
-        } as BackupConfig,
+        },
       );
       return {
         id,
@@ -285,7 +305,7 @@ export async function backupObject(
           description: basic.description,
           appendStructureName: spec.name,
           ...(baseObject ? { baseObject } : {}),
-        } as BackupConfig,
+        },
       );
       return {
         id,
@@ -296,11 +316,10 @@ export async function backupObject(
       };
     }
     case 'messageClass': {
-      const state = await client.getMessageClass().read({ name: spec.name });
-      if (!state?.messageClass) {
+      const mc = await readMessageClass(client, spec.name);
+      if (!mc) {
         throw new Error(`Message class not found: ${spec.name}`);
       }
-      const mc = state.messageClass;
       const config = applyConfigName(
         spec.type,
         spec.name,
@@ -309,7 +328,7 @@ export async function backupObject(
           name: spec.name,
           packageName: mc.packageName,
           description: mc.description,
-        } as BackupConfig,
+        },
       );
       return {
         id,
@@ -329,7 +348,7 @@ export async function backupObject(
         {
           packageName: basic.packageName,
           description: basic.description,
-        } as BackupConfig,
+        },
       );
       return {
         id,

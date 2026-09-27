@@ -4,6 +4,56 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### BREAKING
+
+- **Node.js 22 or 24** (`engines.node: ^22 || ^24`), as `@mcp-abap-adt/auth-broker` 3 requires.
+- **Every command that connects needs `--system-type cloud|onprem|legacy`** (or `SAP_SYSTEM_TYPE` in the environment or the `--env` file). The connector is chosen from it — `AdtCloudConnector` or `AdtOnPremConnector` (`legacy`: on-prem below BASIS 7.50) — and never inferred from the URL or the authentication type. Without it the command stops before connecting and says so.
+
+### Changed
+
+- Dependencies: `@mcp-abap-adt/adt-clients` `^7.3.1` → `^23.0.2`, new `@mcp-abap-adt/adt-strategies` `^0.5.0`, `@mcp-abap-adt/connection` `^1.8.0` → `^9.4.0`, `@mcp-abap-adt/auth-broker` `^1.0.5` → `^3.0.1`, `@mcp-abap-adt/auth-providers` `^1.0.5` → `^4.2.0`, `@mcp-abap-adt/auth-stores` `^1.0.4` → `^1.2.4`. The two lower bounds go together: from connection 9.3.1 only stateful requests carry the ABAP context, and before adt-clients 23.0.2 the UNLOCK of an include, a service binding or a message class went out stateless and released nothing. auth-stores 1.2.4 reports a session file it cannot read instead of answering it as no session. The deleted `@mcp-abap-adt/interfaces` facade is gone; contract types come from `@mcp-abap-adt/interfaces-adt` `^11`, `interfaces-adt-connection` `^1`, `interfaces-auth` `^2.1`, `interfaces-auth-sap` `^1.0.1`, `interfaces-utils` `^1.1`.
+- The session is opened with `connect()` before the first request and given back with `disconnect()` when the command ends, success or not.
+- Browser login goes through `browserCallbackStrategy` on the same callback port as before (`--browser-auth-port`, default 10001) and waits up to three minutes; a login that does not complete is reported as such. A token is renewed through the broker only where UAA credentials stand behind it.
+- adt-clients 23 makes one request per call and composes nothing, so the sequences are this tool's now:
+  - **restore** writes every object with one sequence — create → lock → write → unlock → activate — replacing two near-identical per-type chains. Each step is judged by an adt-strategies verdict; the unlock runs on every path out of a taken lock; a failure carries SAP's message.
+  - **documents are written whole**: domains, data elements, table types and function groups are created and then written with the backed-up metadata XML (`updateMetadata`), instead of a document the library assembled from a few fields.
+  - **group activation waits for its run** (long polling, up to five minutes), reads the results with `analyseActivation` and prints SAP's messages; the inactive list is still what the per-object report states. The fixed 5 × 10 s poll is gone.
+  - **the package walk and function-group children** are read by the tool (ported from adt-clients' `scripts/lib`). An empty package is an empty tree; a package that does not exist is an error (it is asked of `/packages/{name}` first).
+  - **where-used** reads the scope, selects every type and searches with it; without a scope resource (404) it searches unscoped. Interfaces are asked about as `INTF/OI`, structures as `TABL/DS`, behavior implementations as `CLAS/OC`; message classes are no longer asked about.
+  - **group deletion** is judged by `analyseDeletion`, so a refusal SAP writes inside a `200` stops it.
+- Reads: a `404`/`410`, or a `200` with an empty body, is "nothing to take" (ADT answers both for a missing object and for an empty one); any other failure is an error with SAP's message. Text matches such as "not found" inside another status no longer count as absence.
+- Table types are backed up as `xml` (they always held the XML); older backups with `source` still restore and diff as documents.
+- Message classes are parsed by the tool from the raw class document; the payload keeps name, description, package, languages and messages. An existing class's description is rewritten only when it differs (read, edit, lock, write, unlock).
+- An existing package is no longer rewritten on restore: its document carries the source system's software component and transport layer.
+- A `403` during restore is still skipped, and the skip line now carries SAP's text (authorization or a lock held elsewhere).
+
+### Fixed
+
+- The behavior-definition name was never read from a behavior implementation's source (double-escaped regex); a behavior implementation could not be created from a backup whose config lacked it.
+- **Group activation left whole groups inactive when they held a function include or module.** The activation reference carried no function group, adt-clients refuses such a reference before sending anything, and the run for the whole group never started. Activation now builds its references the way deletion already did (`objectReference`): a `FUGR/I` or `FUGR/FF` carries its group as `parentName`. Measured on a cloud trial package of 26 objects: 19 stayed inactive before, 3 after (the three the system itself cannot activate).
+- **`--env <file>` ignored the file.** The CLI took the path only from `--env-path` and treated `--env` as a flag, so the documented form looked for `SAP_URL` in the process environment and stopped with "Missing connection config for destination env". `--env <file>` now reads the file; a bare `--env` still reads the environment.
+- **A restored service binding could not be published.** It was created and published in one step, and the publication answered `200` with "Local Publish of <binding> failed — Service Binding … does not exist": a binding just created has no active version. It is now activated first, then published under its lock (as Eclipse does), with the lock released whatever the job answers. The service's information read (`generateServiceBinding`, a GET) is not the missing step — measured: after the GET the publication still failed, after the activation it succeeded (134 s).
+- **The publication timed out before it finished.** It ran on the library's 120 s default while the job takes 133 s on an idle system and minutes on a loaded one. It now waits up to 15 minutes for the job's own answer; nothing polls.
+- **A restore with failures exited 0 and could say "All objects are active".** The failed object was never activated and never counted, so the final line spoke only for the others. The final line now says when failed objects were not processed, a restore that leaves failures or inactive objects ends with `Restore incomplete: …` and exit status 1.
+- **`diff` and `verify` compared a document-backed object by its package alone.** A domain, data element, function group or table type whose definition changed — a new row type, other keys, another value table — reported "No differences" and `ok`. Both now compare the definition (`canonicalDocument`: the document without what a save rewrites — change and creation stamps, version slot, responsible person, master system, etags, navigation links). For a table type this is a regression from the previous release, which compared it as text.
+- **`backup --objects tableType:…` kept only the name and package.** A table type has no source, and the flat backup fell through to the source read. It now keeps the document whole.
+- **`diff` ignored `--objects` backups.** A flat backup (schema 1) fell through and printed nothing, which read as "no differences" — the documentation promised `diff` for exactly these. It now compares each object that carries content and says which ones it cannot (`--show-ok`).
+- **`extract` read only package backups.** An `--objects` backup (schema 1) holds a flat list with the source as is, and `extract` looked for a tree in it and crashed on `undefined`. It now reads both.
+
+### Removed
+
+- The flat (`schemaVersion 1`) restore path (`restoreObject`, `restoreObjects`, `sortByDependencies`), which no command used. `backup --objects` still writes such backups for `diff`/`check`.
+- Debug scripts built on removed library calls: `scripts/test-hierarchy.ts`, `debug-where-used-list.ts` (and the `debug:deps` npm script), `dump-adt-xml.js`, `debug-nodestructure.ts`, `test-obj-structure.ts`, `test-virtual-folders.ts`. `scripts/delete-package.ts` is rewritten on the new calls and takes the system type as its fourth argument.
+
+### Documentation
+
+- `README.md` and `docs/SMOKE_CHECKLIST.md` showed `verify --input` and `restore --input --mode upsert --force`, which the CLI no longer takes. They now show `plan` → `verify --plan` → `restore --plan`, give every online command its `--system-type`, and compare an `--objects` backup with `diff`, since only a package backup can be planned.
+
+### Tests
+
+- `scripts/integration-test.mjs` follows the current CLI: `backup` → `validate` → `plan` → `verify --plan` → `restore --plan`. It called `list` (removed in February), `verify --input`/`--strict` and `restore --input`/`--force`, none of which exist any more. `tests.verify.strict` and `tests.restore.force` are gone from the template.
+- `npm run test:offline` runs `tests/offline/messageclass.cjs` and the new `tests/offline/sequences.cjs`; the fakes answer `IAdtResponse` as adt-clients 23 does.
+
 ## [2.0.0] - 2026-09-03
 
 ### Licence

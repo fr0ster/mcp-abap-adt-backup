@@ -1,6 +1,7 @@
 import type { AdtClient } from '@mcp-abap-adt/adt-clients';
 import { readMetadataXmlForType } from '../backup/readMetadataXmlForType';
 import { readSourceText } from '../backup/readSourceText';
+import { readMessageClass } from '../messageClass/readMessageClass';
 import type { BackupTreeNode, SupportedType } from '../types';
 
 export async function readPayloadForType(
@@ -27,8 +28,7 @@ export async function readPayloadForType(
     case 'accessControl':
     case 'scalarFunction':
     case 'scalarFunctionImplementation':
-    case 'appendStructure':
-    case 'tableType': {
+    case 'appendStructure': {
       const payload = await readSourceText(client, {
         type,
         name,
@@ -37,12 +37,15 @@ export async function readPayloadForType(
       return { payload: payload ?? undefined, format: 'source' };
     }
     case 'messageClass': {
-      const state = await client.getMessageClass().read({ name });
-      if (!state?.messageClass) {
+      const parsed = await readMessageClass(client, name);
+      if (!parsed) {
         return {};
       }
-      return { payload: JSON.stringify(state.messageClass), format: 'json' };
+      return { payload: JSON.stringify(parsed), format: 'json' };
     }
+    // A table type has no source: it is its document (adt-clients offers no
+    // `read` for it since 18.0.0, and the old read fetched the same XML).
+    case 'tableType':
     case 'domain':
     case 'dataElement':
     case 'package':

@@ -1,5 +1,6 @@
-import type { AdtClient, ObjectReference } from '@mcp-abap-adt/adt-clients';
-import { XMLParser } from 'fast-xml-parser';
+import type { IObjectReference } from '@mcp-abap-adt/interfaces-adt';
+import { AdtCallError } from '../adt/answer';
+import type { RestoreTarget } from '../adt/RestoreTarget';
 import { logVerbose } from '../cli/logVerbose';
 import { flattenTree } from '../tree/flattenTree';
 import { getNodeObjectId } from '../tree/getNodeObjectId';
@@ -9,15 +10,11 @@ import type {
   RestorePlanGroup,
   SupportedType,
 } from '../types';
+import { activateGroup, findInactive } from './activateGroup';
 import { analyzeDependencies } from './analyzeDependencies';
 import { isActivatable } from './isActivatable';
-import { restoreTreeNode } from './restoreTreeNode';
-
-const xmlParser = new XMLParser({
-  ignoreAttributes: false,
-  attributeNamePrefix: '@_',
-  parseAttributeValue: false,
-});
+import { objectReference } from './objectReference';
+import { writeObject } from './writeObject';
 
 /**
  * Per-type activation strategy:
@@ -95,8 +92,18 @@ const RESTORE_PHASES: RestorePhase[] = [
   { name: 'Enhancements', types: ['enhancement'], activation: 'individual' },
 ];
 
+/**
+ * What a restore left behind: the objects that failed, and the objects it
+ * processed that are still inactive. Both are failures of the restore — the
+ * summary line alone used to say "successfully" over either.
+ */
+export interface RestoreOutcome {
+  failed: number;
+  inactive: number;
+}
+
 export async function restoreTreeBackup(
-  client: AdtClient,
+  target: RestoreTarget,
   root: BackupTreeNode,
   mode: RestoreMode,
   activate: boolean,
@@ -107,7 +114,8 @@ export async function restoreTreeBackup(
   softwareComponent?: string,
   superPackageOverride?: string,
   transportLayer?: string,
-): Promise<void> {
+): Promise<RestoreOutcome> {
+  const { client } = target;
   const allNodes = flattenTree(root).filter(
     (node) => node.type && node.restoreStatus === 'ok',
   );
@@ -142,24 +150,28 @@ export async function restoreTreeBackup(
 
   const failures: { node: BackupTreeNode; error: string }[] = [];
 
-  // Helper: check which of our refs are still inactive
-  const findInactiveRefs = async (
-    refs: ObjectReference[],
-  ): Promise<ObjectReference[]> => {
-    const result = await client.getUtils().getInactiveObjects();
-    const inactiveSet = new Set(
-      result.objects.map((o) => `${o.type}:${o.name}`.toUpperCase()),
+  const findInactiveRefs = (refs: IObjectReference[]) =>
+    findInactive(client, refs);
+
+  const reportRemaining = (
+    phaseName: string,
+    stillInactive: IObjectReference[],
+  ) => {
+    logVerbose(
+      1,
+      `  [!] WARNING: ${phaseName}: ${stillInactive.length} object(s) remain inactive:`,
     );
-    return refs.filter((r) =>
-      inactiveSet.has(`${r.type}:${r.name}`.toUpperCase()),
-    );
+    for (const ref of stillInactive) {
+      logVerbose(1, `      - ${ref.type}:${ref.name}`);
+    }
   };
 
-  // Helper to bulk activate a list of refs with verification
-  const bulkActivate = async (phaseName: string, refs: ObjectReference[]) => {
+  // Activate the refs that are inactive, wait for the run, then read the
+  // inactive list again: that list, not the run's verdict, is what the
+  // summary reports.
+  const bulkActivate = async (phaseName: string, refs: IObjectReference[]) => {
     if (refs.length === 0) return;
 
-    // Check which objects are actually inactive
     const toActivate = await findInactiveRefs(refs);
     if (toActivate.length === 0) {
       logVerbose(
@@ -173,70 +185,16 @@ export async function restoreTreeBackup(
       2,
       `  [*] Bulk activating ${phaseName} (${toActivate.length}/${refs.length} inactive)...`,
     );
-
-    let hasErrors = false;
-    try {
-      const result = await client
-        .getUtils()
-        .activateObjectsGroup(toActivate, true);
-      if (result?.data) {
-        const parsed = xmlParser.parse(
-          typeof result.data === 'string' ? result.data : String(result.data),
-        );
-        const msgs = parsed?.['chkl:messages']?.msg;
-        if (msgs) {
-          const msgArray = Array.isArray(msgs) ? msgs : [msgs];
-          for (const msg of msgArray) {
-            const type = msg['@_type'] || 'info';
-            const text = msg?.shortText?.txt || msg?.shortText || String(msg);
-            if (type === 'E') hasErrors = true;
-            logVerbose(2, `    [${type}] ${text}`);
-          }
-        }
-      }
-    } catch (error) {
-      hasErrors = true;
-      const message = error instanceof Error ? error.message : String(error);
-      logVerbose(2, `  [*] Activation request completed (${message})`);
+    const outcome = await activateGroup(client, toActivate);
+    for (const message of outcome.messages) {
+      logVerbose(outcome.ok ? 2 : 1, `    ${message}`);
     }
 
-    // Verify: poll until our objects are no longer inactive (max 5 retries, 10s apart)
-    // Skip polling if activation returned errors
-    if (hasErrors) {
-      const stillInactive = await findInactiveRefs(refs);
-      if (stillInactive.length > 0) {
-        logVerbose(
-          1,
-          `  [!] WARNING: ${phaseName}: ${stillInactive.length} object(s) remain inactive:`,
-        );
-        for (const ref of stillInactive) {
-          logVerbose(1, `      - ${ref.type}:${ref.name}`);
-        }
-      }
-      return;
-    }
-    const maxRetries = 5;
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      const stillInactive = await findInactiveRefs(refs);
-      if (stillInactive.length === 0) {
-        logVerbose(2, `  [*] ${phaseName}: all objects activated successfully`);
-        return;
-      }
-      if (attempt < maxRetries) {
-        logVerbose(
-          2,
-          `  [*] ${stillInactive.length} object(s) still inactive, waiting... (${attempt}/${maxRetries})`,
-        );
-        await new Promise((resolve) => setTimeout(resolve, 10000));
-      } else {
-        logVerbose(
-          1,
-          `  [!] WARNING: ${phaseName}: ${stillInactive.length} object(s) remain inactive:`,
-        );
-        for (const ref of stillInactive) {
-          logVerbose(1, `      - ${ref.type}:${ref.name}`);
-        }
-      }
+    const stillInactive = await findInactiveRefs(refs);
+    if (stillInactive.length === 0) {
+      logVerbose(2, `  [*] ${phaseName}: all objects activated successfully`);
+    } else {
+      reportRemaining(phaseName, stillInactive);
     }
   };
 
@@ -244,7 +202,7 @@ export async function restoreTreeBackup(
   const processNode = async (
     node: BackupTreeNode,
     activateFlag: boolean,
-  ): Promise<ObjectReference | null> => {
+  ): Promise<IObjectReference | null> => {
     const nodeId = getNodeObjectId(node);
     if (!nodeId) return null;
 
@@ -262,24 +220,27 @@ export async function restoreTreeBackup(
     );
 
     try {
-      await restoreTreeNode(
-        client,
-        node,
-        nodeMode,
-        activateFlag,
+      await writeObject(target, node, {
+        mode: nodeMode,
+        activate: activateFlag,
         transportRequest,
         softwareComponent,
         backupPackageNames,
-        undefined,
         transportLayer,
-      );
+      });
       if (shouldActivate && node.adtType && isActivatable(node.type)) {
-        return { name: node.name, type: node.adtType };
+        return objectReference({
+          name: node.name,
+          adtType: node.adtType,
+          functionGroupName: node.functionGroupName,
+        });
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (message.includes('status code 403')) {
-        logVerbose(1, `  [SKIP] ${node.type}:${node.name} — no authorization`);
+      if (error instanceof AdtCallError && error.status === 403) {
+        // Refused, typically for want of authorization on this type — or a
+        // lock another session holds; SAP's text says which.
+        logVerbose(1, `  [SKIP] ${node.type}:${node.name} — ${message}`);
       } else {
         logVerbose(1, `  [FAIL] ${node.type}:${node.name} — ${message}`);
         failures.push({ node, error: message });
@@ -310,17 +271,15 @@ export async function restoreTreeBackup(
         } else {
           logVerbose(2, `  [PACKAGE] ${node.name}`);
           try {
-            await restoreTreeNode(
-              client,
-              node,
-              effectiveMode,
-              false,
+            await writeObject(target, node, {
+              mode: effectiveMode,
+              activate: false,
               transportRequest,
               softwareComponent,
               backupPackageNames,
-              parentName || superPackageOverride,
+              superPackage: parentName || superPackageOverride,
               transportLayer,
-            );
+            });
           } catch (e) {
             if (isRootNode) {
               logVerbose(
@@ -345,7 +304,7 @@ export async function restoreTreeBackup(
     await restorePackageRecursive(root, undefined);
   }
 
-  const allProcessedRefs: ObjectReference[] = [];
+  const allProcessedRefs: IObjectReference[] = [];
 
   if (planGroups) {
     // ===== Plan-driven restore: follow plan group order =====
@@ -362,7 +321,7 @@ export async function restoreTreeBackup(
         `[GROUP ${group.id}] ${nonPackageActions.length} object(s)${group.isCircular ? ' (circular)' : ''}`,
       );
 
-      const groupRefs: ObjectReference[] = [];
+      const groupRefs: IObjectReference[] = [];
       for (const action of nonPackageActions) {
         if (action.action === 'skip') {
           logVerbose(2, `  [SKIP] ${action.type}:${action.name}`);
@@ -427,7 +386,7 @@ export async function restoreTreeBackup(
           if (ref) allProcessedRefs.push(ref);
         }
       } else if (phase.activation === 'bulk') {
-        const refs: ObjectReference[] = [];
+        const refs: IObjectReference[] = [];
         for (const node of phaseNodes) {
           const ref = await processNode(node, false);
           if (ref) refs.push(ref);
@@ -439,7 +398,7 @@ export async function restoreTreeBackup(
         logVerbose(2, `  Dependency clustering: ${groups.length} cluster(s)`);
         for (let gi = 0; gi < groups.length; gi++) {
           const group = groups[gi];
-          const clusterRefs: ObjectReference[] = [];
+          const clusterRefs: IObjectReference[] = [];
           for (const node of group.nodes) {
             const ref = await processNode(node, false);
             if (ref) clusterRefs.push(ref);
@@ -467,7 +426,10 @@ export async function restoreTreeBackup(
     }
   }
 
-  // Final check: find remaining inactive objects and activate them
+  // Final check: find remaining inactive objects and activate them. Only the
+  // objects that were processed are checked — a failed one is in `failures`,
+  // so "all active" below never speaks for it.
+  let inactiveLeft = 0;
   if (allProcessedRefs.length > 0) {
     const stillInactive = await findInactiveRefs(allProcessedRefs);
     if (stillInactive.length > 0) {
@@ -475,25 +437,34 @@ export async function restoreTreeBackup(
         1,
         `[FINAL] ${stillInactive.length} object(s) still inactive, activating...`,
       );
-      try {
-        await client.getUtils().activateObjectsGroup(stillInactive, true);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        logVerbose(2, `  [*] Final activation request completed (${message})`);
+      const outcome = await activateGroup(client, stillInactive);
+      for (const message of outcome.messages) {
+        logVerbose(outcome.ok ? 2 : 1, `    ${message}`);
       }
 
       // Verify final state
       const remaining = await findInactiveRefs(allProcessedRefs);
+      inactiveLeft = remaining.length;
       if (remaining.length > 0) {
         logVerbose(1, `  [!] ${remaining.length} object(s) remain inactive:`);
         for (const ref of remaining) {
           logVerbose(1, `      - ${ref.type}:${ref.name}`);
         }
       } else {
-        logVerbose(1, '[FINAL] All objects activated successfully.');
+        logVerbose(
+          1,
+          failures.length > 0
+            ? '[FINAL] All processed objects activated; the failed ones below were not processed.'
+            : '[FINAL] All objects activated successfully.',
+        );
       }
     } else {
-      logVerbose(1, '[FINAL] All objects are active.');
+      logVerbose(
+        1,
+        failures.length > 0
+          ? '[FINAL] All processed objects are active; the failed ones below were not processed.'
+          : '[FINAL] All objects are active.',
+      );
     }
   }
 
@@ -505,7 +476,13 @@ export async function restoreTreeBackup(
     for (const f of failures) {
       logVerbose(1, `  - ${f.node.type}:${f.node.name}: ${f.error}`);
     }
+  } else if (inactiveLeft > 0) {
+    logVerbose(
+      1,
+      `\n>>> RESTORE COMPLETED WITH ${inactiveLeft} OBJECT(S) INACTIVE.`,
+    );
   } else {
     logVerbose(1, '\n>>> RESTORE COMPLETED SUCCESSFULLY.');
   }
+  return { failed: failures.length, inactive: inactiveLeft };
 }

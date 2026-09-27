@@ -1,4 +1,3 @@
-import type { IDataElementConfig } from '@mcp-abap-adt/adt-clients';
 import { xmlParser } from '../constants/xmlParser';
 import type { NodeValue } from '../types';
 import { findAttribute } from './findAttribute';
@@ -7,9 +6,32 @@ import { findNodeValue } from './findNodeValue';
 import { getNodeAttribute } from './getNodeAttribute';
 import { toNumber } from './toNumber';
 
-export function parseDataElementConfig(
-  xml: string,
-): Partial<IDataElementConfig> {
+/**
+ * What the backup records about a data element, read from its document.
+ *
+ * The backup's own record rather than `IDataElementConfig`, which describes a
+ * create and has no labels, decimals or search help. The restore writes the
+ * backed-up document, not this record.
+ */
+export interface DataElementBackupConfig {
+  dataElementName?: string;
+  description?: string;
+  packageName?: string;
+  dataType?: string;
+  length?: number;
+  decimals?: number;
+  shortLabel?: string;
+  mediumLabel?: string;
+  longLabel?: string;
+  headingLabel?: string;
+  typeKind?: string;
+  typeName?: string;
+  searchHelp?: string;
+  searchHelpParameter?: string;
+  setGetParameter?: string;
+}
+
+export function parseDataElementConfig(xml: string): DataElementBackupConfig {
   const parsed = xmlParser.parse(xml) as NodeValue;
   const root = findNode(parsed, ['blue:wbobj', 'wbobj']) ?? parsed;
   const dataElementName =
@@ -23,9 +45,7 @@ export function parseDataElementConfig(
     getNodeAttribute(packageRef, 'adtcore:name') ||
     findAttribute(packageRef, 'adtcore:name');
 
-  const typeKind = findNodeValue(root, ['dtel:typeKind', 'typeKind']) as
-    | IDataElementConfig['typeKind']
-    | undefined;
+  const typeKind = findNodeValue(root, ['dtel:typeKind', 'typeKind']);
   const typeName = findNodeValue(root, ['dtel:typeName', 'typeName']);
   const dataType = findNodeValue(root, ['dtel:dataType', 'dataType']);
   const length = toNumber(

@@ -1,10 +1,14 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { ObjectReference } from '@mcp-abap-adt/adt-clients';
-import { AdtClient, getSystemInformation } from '@mcp-abap-adt/adt-clients';
-import { createAbapConnection } from '@mcp-abap-adt/connection';
-import { XMLParser } from 'fast-xml-parser';
+import {
+  AdtClient,
+  AdtMessageClassMessage,
+  getSystemInformation,
+} from '@mcp-abap-adt/adt-clients';
+import type { IObjectReference } from '@mcp-abap-adt/interfaces-adt';
 import YAML from 'yaml';
+import type { RestoreTarget } from './adt/RestoreTarget';
+import { DEFAULT_BROWSER_AUTH_PORT } from './auth/createTokenProvider';
 import { getSapConfigFromBroker } from './auth/getSapConfigFromBroker';
 import { backupObject } from './backup/backupObject';
 import { readMetadataXmlForType } from './backup/readMetadataXmlForType';
@@ -17,6 +21,12 @@ import { parseArgs } from './cli/parseArgs';
 import { shouldEnableAdtLogger } from './cli/shouldEnableAdtLogger';
 import { shouldEnableConnectionLogger } from './cli/shouldEnableConnectionLogger';
 import { usage } from './cli/usage';
+import {
+  type AdtConnection,
+  closeConnection,
+  createConnection,
+  resolveSystemType,
+} from './connection/createConnection';
 import { computeBackupChecksum } from './crypto/computeBackupChecksum';
 import { computeCodeChecksum } from './crypto/computeCodeChecksum';
 import { decodeBase64 } from './crypto/decodeBase64';
@@ -26,9 +36,12 @@ import { verifyBackupChecksum } from './crypto/verifyBackupChecksum';
 import { verifyTreeChecksums } from './crypto/verifyTreeChecksums';
 import { collectTreeDependencies } from './dependencies/collectTreeDependencies';
 import { canonicalizeMessageClass } from './messageClass/canonicalizeMessageClass';
+import { readMessageClass } from './messageClass/readMessageClass';
 import type { ParsedMessageClass } from './messageClass/types';
+import { activateGroup, findInactive } from './restore/activateGroup';
 import { analyzeDependencyLevels } from './restore/analyzeDependencies';
 import { isActivatable } from './restore/isActivatable';
+import { objectReference } from './restore/objectReference';
 import { restoreTreeBackup } from './restore/restoreTreeBackup';
 import { verbosityState } from './state/verbosity';
 import { buildPackageBackupTree } from './tree/buildPackageBackupTree';
@@ -36,6 +49,7 @@ import { enrichTreeNode } from './tree/enrichTreeNode';
 import { findNodeInTree } from './tree/findNodeInTree';
 import { flattenTree } from './tree/flattenTree';
 import { getNodeObjectId } from './tree/getNodeObjectId';
+import { walkPackageTree } from './tree/walkPackage';
 import type {
   BackupFile,
   BackupObject,
@@ -45,7 +59,6 @@ import type {
   RestoreMode,
   RestorePlan,
   RestorePlanGroup,
-  SupportedType,
 } from './types';
 import { diffUnified } from './utils/diffUnified';
 import { formatObjectSpec } from './utils/formatObjectSpec';
@@ -53,13 +66,7 @@ import { parseObjectSpec } from './utils/parseObjectSpec';
 import { collectBackupNodes } from './verify/collectBackupNodes';
 import { formatVerifyResultsText } from './verify/formatVerifyResultsText';
 import { verifyBackup } from './verify/verifyBackup';
-import { extractMetadata } from './xml/extractMetadata';
-
-const xmlParser = new XMLParser({
-  ignoreAttributes: false,
-  attributeNamePrefix: '@_',
-  parseAttributeValue: false,
-});
+import { canonicalDocument } from './xml/canonicalDocument';
 
 export async function run(): Promise<void> {
   const argv = process.argv.slice(2);
@@ -97,8 +104,15 @@ export async function run(): Promise<void> {
 
   const isMcp = Boolean(args.mcp);
   const isEnv = Boolean(args.env);
+  // `--env <file>` is the documented form and `--env-path` its alias; a bare
+  // `--env` reads the process environment. Reading only `--env-path` dropped
+  // the file named by `--env` and looked for SAP_URL in the environment.
   const envPathArg =
-    typeof args['env-path'] === 'string' ? args['env-path'] : undefined;
+    typeof args['env-path'] === 'string'
+      ? args['env-path']
+      : typeof args.env === 'string'
+        ? args.env
+        : undefined;
 
   let destination: string | undefined;
   let envPath: string | undefined;
@@ -133,6 +147,8 @@ export async function run(): Promise<void> {
   const canUseAuth = command === 'plan';
 
   let client: AdtClient | undefined;
+  let connection: AdtConnection | undefined;
+  let target: RestoreTarget | undefined;
 
   if (needsAuth || (canUseAuth && (envPath || destination))) {
     if (needsAuth && !envPath && !destination) {
@@ -152,9 +168,15 @@ export async function run(): Promise<void> {
         browserAuthPort:
           typeof args['browser-auth-port'] === 'string'
             ? Number.parseInt(args['browser-auth-port'], 10)
-            : 10001,
+            : DEFAULT_BROWSER_AUTH_PORT,
         logger,
       });
+      // After the broker: an --env file may be what states it.
+      const systemType = resolveSystemType(
+        typeof args['system-type'] === 'string'
+          ? args['system-type']
+          : undefined,
+      );
 
       const allowAdtLogs =
         verbosityState.level >= 3 || Boolean(args['debug-adt']);
@@ -172,26 +194,54 @@ export async function run(): Promise<void> {
           ? logger
           : undefined;
 
-      const connection = createAbapConnection(
+      connection = createConnection(
         sapAuth.config,
-        connectionLogger,
-        undefined,
+        systemType,
         sapAuth.tokenRefresher,
+        connectionLogger,
       );
-      // Resolve masterSystem/responsible for AdtClient:
-      // Cloud (BTP): both from getSystemInformation endpoint
-      // On-premise: responsible from connection username, no masterSystem
-      const systemInfo = await getSystemInformation(connection);
-      const masterSystem = systemInfo?.systemID;
-      const responsible = systemInfo?.userName || sapAuth.config.username;
+      await connection.connect();
+      try {
+        // masterSystem/responsible for created objects. The system answers
+        // both where it offers the endpoint; otherwise the logon user is the
+        // responsible person, upper-cased as the user master stores it.
+        const systemInfo = await getSystemInformation(connection);
+        const masterSystem = systemInfo?.systemID;
+        const responsible =
+          systemInfo?.userName || sapAuth.config.username?.toUpperCase();
 
-      client = new AdtClient(connection, adtLogger, {
-        masterSystem,
-        responsible,
-      });
+        client = new AdtClient(connection, adtLogger, {
+          masterSystem,
+          responsible,
+        });
+        // Message rows are written through the implementation itself: the
+        // factory's contract has no delete, and the restore needs one.
+        target = {
+          client,
+          messages: new AdtMessageClassMessage(connection, adtLogger),
+        };
+      } catch (error) {
+        await closeConnection(connection);
+        throw error;
+      }
     }
   }
 
+  try {
+    await dispatch(command, args, client, target, destination);
+  } finally {
+    if (connection) await closeConnection(connection);
+  }
+}
+
+/** Runs one command on an open client. Exported for the offline tests. */
+export async function dispatch(
+  command: string,
+  args: Record<string, string | boolean | number>,
+  client: AdtClient | undefined,
+  target: RestoreTarget | undefined,
+  destination: string | undefined,
+): Promise<void> {
   if (command === 'tree') {
     if (!client) throw new Error('Client required');
     const packageName =
@@ -200,13 +250,9 @@ export async function run(): Promise<void> {
     const output = typeof args.output === 'string' ? args.output : 'tree.yaml';
 
     logVerbose(1, `Fetching package hierarchy for ${packageName}`);
-    const hierarchy = await client
-      .getUtils()
-      .getPackageHierarchy(packageName.toUpperCase());
+    const hierarchy = await walkPackageTree(client, packageName);
     const rootTree: BackupTreeNode = {
       ...hierarchy,
-      type: hierarchy.type as SupportedType | undefined,
-      children: hierarchy.children as BackupTreeNode[] | undefined,
       restoreStatus: 'ok',
     };
     const enrichedRoot = await enrichTreeNode(rootTree, client, false);
@@ -433,12 +479,6 @@ export async function run(): Promise<void> {
     const backup = YAML.parse(
       fs.readFileSync(plan.backupFile, 'utf8'),
     ) as BackupTreeFile;
-    const allNodes = flattenTree(backup.root);
-    const _nodeMap = new Map(allNodes.map((n) => [getNodeObjectId(n)!, n]));
-    const _backupPackageNames = new Set(
-      allNodes.filter((n) => n.type === 'package').map((n) => n.name),
-    );
-
     const noActivate = Boolean(args['no-activate']);
     const activate =
       !noActivate && (Boolean(args.activate) || !args['no-activate-on-update']);
@@ -452,8 +492,9 @@ export async function run(): Promise<void> {
         ? args['transport-layer']
         : undefined;
 
-    await restoreTreeBackup(
-      client,
+    if (!target) throw new Error('Client required');
+    const outcome = await restoreTreeBackup(
+      target,
       backup.root,
       'upsert',
       activate,
@@ -482,6 +523,14 @@ export async function run(): Promise<void> {
         verbosityState.level,
       ),
     );
+    // A restore that left failures or inactive objects did not restore, and
+    // its exit status says so — a script cannot read the log.
+    if (outcome.failed > 0 || outcome.inactive > 0) {
+      console.log(
+        `Restore incomplete: ${outcome.failed} failed, ${outcome.inactive} inactive.`,
+      );
+      process.exitCode = 1;
+    }
     return;
   }
 
@@ -501,13 +550,13 @@ export async function run(): Promise<void> {
     const plan = YAML.parse(fs.readFileSync(planPath, 'utf8')) as RestorePlan;
 
     // Collect all plan refs (non-package, matching filter)
-    const planRefs: ObjectReference[] = [];
+    const planRefs: IObjectReference[] = [];
     for (const group of plan.groups) {
       for (const action of group.actions) {
         if (action.type === 'package' || !action.adtType) continue;
         if (filter !== 'all' && action.action !== filter) continue;
         if (filter === 'all' && action.action === 'create') continue;
-        planRefs.push({ name: action.name, type: action.adtType });
+        planRefs.push(objectReference({ ...action, adtType: action.adtType }));
       }
     }
 
@@ -517,13 +566,11 @@ export async function run(): Promise<void> {
     }
 
     // Check which plan objects are actually inactive
-    const inactiveResult = await client.getUtils().getInactiveObjects();
+    const inactiveRefs = await findInactive(client, planRefs);
     const inactiveSet = new Set(
-      inactiveResult.objects.map((o) => `${o.type}:${o.name}`.toUpperCase()),
+      inactiveRefs.map((o) => `${o.type}:${o.name}`.toUpperCase()),
     );
-    const toActivate = planRefs.filter((r) =>
-      inactiveSet.has(`${r.type}:${r.name}`.toUpperCase()),
-    );
+    const toActivate = inactiveRefs;
     const alreadyActive = planRefs.length - toActivate.length;
 
     if (toActivate.length === 0) {
@@ -542,7 +589,7 @@ export async function run(): Promise<void> {
     let failed = 0;
 
     for (const group of plan.groups) {
-      const groupRefs: ObjectReference[] = [];
+      const groupRefs: IObjectReference[] = [];
       for (const action of group.actions) {
         if (
           action.type === 'package' ||
@@ -552,7 +599,9 @@ export async function run(): Promise<void> {
           continue;
         const key = `${action.adtType}:${action.name}`.toUpperCase();
         if (inactiveSet.has(key)) {
-          groupRefs.push({ name: action.name, type: action.adtType });
+          groupRefs.push(
+            objectReference({ ...action, adtType: action.adtType }),
+          );
         }
       }
 
@@ -563,64 +612,21 @@ export async function run(): Promise<void> {
         `  [GROUP ${group.id}] Activating ${groupRefs.length} inactive object(s)...`,
       );
 
-      let hasErrors = false;
-      try {
-        const result = await client
-          .getUtils()
-          .activateObjectsGroup(groupRefs, true);
-        // Parse activation result messages
-        if (result?.data) {
-          const parsed = xmlParser.parse(
-            typeof result.data === 'string' ? result.data : String(result.data),
-          );
-          const msgs = parsed?.['chkl:messages']?.msg;
-          if (msgs) {
-            const msgArray = Array.isArray(msgs) ? msgs : [msgs];
-            for (const msg of msgArray) {
-              const type = msg['@_type'] || 'info';
-              const text = msg?.shortText?.txt || msg?.shortText || String(msg);
-              if (type === 'E') hasErrors = true;
-              logVerbose(2, `    [${type}] ${text}`);
-            }
-          }
-        }
-      } catch (error) {
-        hasErrors = true;
-        const message = error instanceof Error ? error.message : String(error);
-        logVerbose(2, `  [*] Activation request completed (${message})`);
+      // The run is waited for inside activateGroup; the inactive list read
+      // afterwards is what the per-object report states.
+      const outcome = await activateGroup(client, groupRefs);
+      for (const message of outcome.messages) {
+        logVerbose(2, `    ${message}`);
       }
 
-      // Poll until objects are no longer inactive (max 5 retries, 10s apart)
-      // Skip polling if activation returned errors (no point waiting)
-      if (!hasErrors) {
-        const maxRetries = 5;
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-          const postResult = await client.getUtils().getInactiveObjects();
-          const postInactiveSet = new Set(
-            postResult.objects.map((o) => `${o.type}:${o.name}`.toUpperCase()),
-          );
-          const stillInactive = groupRefs.filter((r) =>
-            postInactiveSet.has(`${r.type}:${r.name}`.toUpperCase()),
-          );
-          if (stillInactive.length === 0) break;
-          if (attempt < maxRetries) {
-            logVerbose(
-              2,
-              `  [*] ${stillInactive.length} still inactive, waiting... (${attempt}/${maxRetries})`,
-            );
-            await new Promise((resolve) => setTimeout(resolve, 10000));
-          }
-        }
-      }
-
-      // Report per-object status
-      const finalResult = await client.getUtils().getInactiveObjects();
-      const finalInactiveSet = new Set(
-        finalResult.objects.map((o) => `${o.type}:${o.name}`.toUpperCase()),
+      const stillInactive = new Set(
+        (await findInactive(client, groupRefs)).map((r) =>
+          `${r.type}:${r.name}`.toUpperCase(),
+        ),
       );
       for (const ref of groupRefs) {
         const key = `${ref.type}:${ref.name}`.toUpperCase();
-        if (finalInactiveSet.has(key)) {
+        if (stillInactive.has(key)) {
           logVerbose(2, `    INACTIVE ${ref.type} ${ref.name}`);
           failed++;
         } else {
@@ -657,15 +663,17 @@ export async function run(): Promise<void> {
       metadataXml: string,
       showNoDiff: boolean,
     ) => {
-      const beforeMeta = extractMetadata(backupText);
-      const afterMeta = extractMetadata(metadataXml);
-      if (beforeMeta.packageName === afterMeta.packageName) {
+      // The whole definition, not the package alone: a document's row type,
+      // keys, value table or labels are what a restore writes back.
+      const unified = diffUnified(
+        canonicalDocument(backupText),
+        canonicalDocument(metadataXml),
+      );
+      if (!unified.trim()) {
         if (showNoDiff) console.log(`=== ${label}\nNo differences`);
         return false;
       }
-      console.log(
-        `=== ${label}\nchanged packageName: "${beforeMeta.packageName ?? ''}" -> "${afterMeta.packageName ?? ''}"`,
-      );
+      console.log(`=== ${label}\n${unified}`);
       return true;
     };
 
@@ -696,15 +704,14 @@ export async function run(): Promise<void> {
       const label = formatObjectSpec(spec);
       const backupText = decodeBase64(node.codeBase64);
       if (node.type === 'messageClass') {
-        const state = await client.getMessageClass().read({ name: node.name });
+        const system = await readMessageClass(client, node.name);
         const backupCanon = canonicalizeMessageClass(
           JSON.parse(backupText) as ParsedMessageClass,
         );
-        const systemCanon = state?.messageClass
-          ? canonicalizeMessageClass(state.messageClass as ParsedMessageClass)
-          : '';
+        const systemCanon = system ? canonicalizeMessageClass(system) : '';
         await diffSource(label, backupCanon, systemCanon, showOk);
-      } else if (node.codeFormat === 'xml') {
+      } else if (node.codeFormat === 'xml' || node.type === 'tableType') {
+        // A table type is its document, whatever an older backup recorded.
         const metadataXml = await readMetadataXmlForType(
           client,
           node.type,
@@ -735,6 +742,37 @@ export async function run(): Promise<void> {
       }
       return;
     }
+
+    // A flat `--objects` backup (schema 1) carries each object's source as
+    // is — a table type's is its document. It used to fall through here and
+    // print nothing at all, which read as "no differences".
+    const wanted = diffAll ? undefined : parseObjectSpec(objectSpecValue);
+    const objects = parsed.objects.filter(
+      (o) =>
+        !wanted ||
+        (o.type === wanted.type &&
+          o.name.toUpperCase() === wanted.name.toUpperCase() &&
+          (!wanted.functionGroupName ||
+            o.functionGroupName?.toUpperCase() ===
+              wanted.functionGroupName.toUpperCase())),
+    );
+    if (wanted && objects.length === 0) throw new Error('Object not found');
+    for (const object of objects) {
+      if (object.source === undefined) {
+        if (showOk)
+          console.log(
+            `=== ${object.type}:${object.name}\nNot compared: the backup holds no content for it`,
+          );
+        continue;
+      }
+      await diffNode({
+        name: object.name,
+        type: object.type,
+        functionGroupName: object.functionGroupName,
+        codeFormat: object.type === 'tableType' ? 'xml' : undefined,
+        codeBase64: Buffer.from(object.source, 'utf8').toString('base64'),
+      } as BackupTreeNode);
+    }
     return;
   }
 
@@ -760,11 +798,29 @@ export async function run(): Promise<void> {
       typeof output !== 'string'
     )
       throw new Error('Missing args');
-    const parsed = YAML.parse(fs.readFileSync(input, 'utf8')) as BackupTreeFile;
+    const parsed = YAML.parse(fs.readFileSync(input, 'utf8')) as
+      | BackupFile
+      | BackupTreeFile;
     const spec = parseObjectSpec(objectSpec);
-    const node = findNodeInTree(parsed.root, spec);
-    if (!node || !node.codeBase64) throw new Error('Not found');
-    fs.writeFileSync(output, decodeBase64(node.codeBase64), 'utf8');
+    // A package backup is a tree (schema 2) holding base64 code; an
+    // `--objects` backup is a flat list (schema 1) holding the source as is.
+    let code: string | undefined;
+    if (parsed.schemaVersion === 2) {
+      const node = findNodeInTree(parsed.root, spec);
+      code = node?.codeBase64 ? decodeBase64(node.codeBase64) : undefined;
+    } else {
+      const object = parsed.objects.find(
+        (o) =>
+          o.type === spec.type &&
+          o.name.toUpperCase() === spec.name.toUpperCase() &&
+          (!spec.functionGroupName ||
+            o.functionGroupName?.toUpperCase() ===
+              spec.functionGroupName.toUpperCase()),
+      );
+      code = object?.source;
+    }
+    if (code === undefined) throw new Error('Not found');
+    fs.writeFileSync(output, code, 'utf8');
     console.log(`Extracted to ${output}`);
     return;
   }

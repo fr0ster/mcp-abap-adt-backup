@@ -1,3 +1,4 @@
+export * from './canonicalDocument';
 export * from './extractMetadata';
 export * from './findAttribute';
 export * from './findNode';

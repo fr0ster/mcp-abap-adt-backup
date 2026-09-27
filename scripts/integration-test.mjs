@@ -32,17 +32,20 @@ const restoreDestinationDir =
   restoreAuth?.destination_dir || verifyDestinationDir || destinationDir || '';
 const restoreEnvironmentFile =
   restoreAuth?.environment_file || verifyEnvironmentFile || environmentFile || '';
+// The kind of system each run dials is stated, never inferred from the URL.
+const systemType = backupAuth?.system_type || '';
+const verifySystemType = verifyAuth?.system_type || systemType;
+const restoreSystemType = restoreAuth?.system_type || verifySystemType;
 const outputDir = config?.tests?.backup?.output_dir || '';
 const packageName = config?.tests?.backup?.package?.name || '';
 const className = config?.tests?.backup?.class?.name || '';
 const restoreEnabled = Boolean(config?.tests?.restore?.enabled);
-const restoreForce = Boolean(config?.tests?.restore?.force);
 const verifyEnabled = Boolean(config?.tests?.verify?.enabled);
-const verifyStrict = Boolean(config?.tests?.verify?.strict);
 
 const missing = [];
 if (!packageName) missing.push('tests.backup.package.name');
 if (!className) missing.push('tests.backup.class.name');
+if (!systemType) missing.push('auth_broker.backup.system_type');
 if (!outputDir) missing.push('tests.backup.output_dir');
 if (!environmentFile && !destination) {
   missing.push('auth_broker.backup.abap.destination');
@@ -71,7 +74,11 @@ if (!fs.existsSync(cliPath)) {
   process.exit(1);
 }
 
-const baseArgs = destination ? ['--destination', destination] : [];
+const baseArgs = [
+  ...(destination ? ['--destination', destination] : []),
+  '--system-type',
+  systemType,
+];
 const envArgs = environmentFile ? ['--env', environmentFile] : [];
 const defaultDestinationDir =
   process.platform === 'win32'
@@ -87,9 +94,11 @@ if (environmentFile) {
   console.log(`Using backup destination_dir: ${resolvedDestinationDir}`);
 }
 
-const verifyBaseArgs = verifyDestination
-  ? ['--destination', verifyDestination]
-  : [];
+const verifyBaseArgs = [
+  ...(verifyDestination ? ['--destination', verifyDestination] : []),
+  '--system-type',
+  verifySystemType,
+];
 const verifyEnvArgs = verifyEnvironmentFile
   ? ['--env', verifyEnvironmentFile]
   : [];
@@ -104,9 +113,11 @@ if (verifyEnvironmentFile) {
   console.log(`Using verify destination_dir: ${resolvedVerifyDestinationDir}`);
 }
 
-const restoreBaseArgs = restoreDestination
-  ? ['--destination', restoreDestination]
-  : [];
+const restoreBaseArgs = [
+  ...(restoreDestination ? ['--destination', restoreDestination] : []),
+  '--system-type',
+  restoreSystemType,
+];
 const restoreEnvArgs = restoreEnvironmentFile
   ? ['--env', restoreEnvironmentFile]
   : [];
@@ -141,26 +152,22 @@ const packageBackup = path.join(
 const classBackup = path.join(outputDir, `${className}_backup.yaml`);
 const classSource = path.join(outputDir, `${className}.abap`);
 
+const packagePlan = path.join(outputDir, `${packageName}_plan.yaml`);
+const verifyArgs = [...verifyBaseArgs, ...verifyEnvArgs, ...verifyAuthRootArgs];
+
+// The CLI's sequence: backup → validate → plan (offline) → verify (reads the
+// target and fills the plan's actions) → restore (runs the plan).
 run(['backup', '--package', packageName, '--output', packageBackup]);
 run(['validate', '--input', packageBackup]);
-run(['list', '--input', packageBackup]);
-if (verifyEnabled) {
-  const verifyArgs = ['verify', '--input', packageBackup];
-  if (verifyStrict) {
-    verifyArgs.push('--strict');
-  }
-  run(verifyArgs, [...verifyBaseArgs, ...verifyEnvArgs, ...verifyAuthRootArgs]);
+run(['plan', '--input', packageBackup, '--output', packagePlan]);
+if (verifyEnabled || restoreEnabled) {
+  run(['verify', '--plan', packagePlan], verifyArgs);
 }
 
 run(['backup', '--objects', `class:${className}`, '--output', classBackup]);
 run(['validate', '--input', classBackup]);
-if (verifyEnabled) {
-  const verifyArgs = ['verify', '--input', classBackup];
-  if (verifyStrict) {
-    verifyArgs.push('--strict');
-  }
-  run(verifyArgs, [...verifyBaseArgs, ...verifyEnvArgs, ...verifyAuthRootArgs]);
-}
+// An `--objects` backup is a flat list, not a package tree: `plan` takes only
+// the tree (schema 2), so a single object is validated and extracted.
 run([
   'extract',
   '--input',
@@ -172,12 +179,8 @@ run([
 ]);
 
 if (restoreEnabled) {
-  const restoreArgs = ['restore', '--input', packageBackup];
-  if (restoreForce) {
-    restoreArgs.push('--force');
-  }
   run(
-    restoreArgs,
+    ['restore', '--plan', packagePlan],
     [...restoreBaseArgs, ...restoreEnvArgs, ...restoreAuthRootArgs],
   );
 }

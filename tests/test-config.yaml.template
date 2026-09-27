@@ -12,6 +12,10 @@ auth_broker:
     # Optional: explicit .env file path (uses --env flow)
     environment_file: <BACKUP_ENVIRONMENT_FILE>
 
+    # Which kind of system this is: cloud | onprem | legacy (required).
+    # Passed as --system-type; never derived from the URL or the auth type.
+    system_type: <BACKUP_SYSTEM_TYPE>
+
     # ABAP destination configuration
     abap:
       # Destination name used for service key and session files
@@ -21,6 +25,7 @@ auth_broker:
   verify:
     destination_dir: <VERIFY_DESTINATION_DIR>
     environment_file: <VERIFY_ENVIRONMENT_FILE>
+    system_type: <VERIFY_SYSTEM_TYPE>
     abap:
       destination: <VERIFY_DESTINATION>
 
@@ -28,6 +33,7 @@ auth_broker:
   restore:
     destination_dir: <RESTORE_DESTINATION_DIR>
     environment_file: <RESTORE_ENVIRONMENT_FILE>
+    system_type: <RESTORE_SYSTEM_TYPE>
     abap:
       destination: <RESTORE_DESTINATION>
 
@@ -49,12 +55,8 @@ tests:
   restore:
     # Enable restore test
     enabled: false
-    # Optional: force restore (use --force)
-    force: false
 
   # Group 3: Verify tests
   verify:
     # Enable verify test
     enabled: false
-    # Optional: strict verify (use --strict)
-    strict: false

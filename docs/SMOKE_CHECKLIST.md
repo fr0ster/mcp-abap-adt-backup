@@ -8,9 +8,13 @@ This checklist is for manual validation after landscape/auth setup is ready.
 ```bash
 npm run build
 ```
-2. Auth is configured and valid for your destination:
+2. Auth is configured and valid for your destination, and you know which kind of
+   system it is. Every online command below also needs
+   `--system-type cloud|onprem|legacy` (or `SAP_SYSTEM_TYPE` set in the
+   environment); it is never derived from the URL:
 ```bash
 adt-backup --help
+export SAP_SYSTEM_TYPE=cloud   # or onprem / legacy
 ```
 3. Use a writable temp folder:
 ```bash
@@ -40,18 +44,27 @@ adt-backup validate \
 Expected:
 - `Backup validated`
 
-## 3) Verify: compare with system
+## 3) Plan and verify: compare with system
+
+A restore runs from a plan. `plan` is offline and reads the backup; `verify`
+reads the target system and marks each action `create`, `update` or `skip`.
+Only a package backup (a tree) can be planned.
 
 ```bash
-adt-backup verify \
+adt-backup plan \
   --input /tmp/adt-backup-smoke/package_backup.yaml \
+  --output /tmp/adt-backup-smoke/package_plan.yaml
+
+adt-backup verify \
+  --plan /tmp/adt-backup-smoke/package_plan.yaml \
   --destination <DESTINATION> -vv
 ```
 
 Expected:
-- no unexpected `missing` / `type-mismatch` entries
+- a summary line `Summary (pre-restore): Total: …`; on the system the backup
+  came from, every object is `ok` and planned as `update`
 
-## 4) Service Binding: focused backup/validate/verify
+## 4) Service Binding: focused backup/validate/diff
 
 ```bash
 adt-backup backup \
@@ -65,40 +78,47 @@ adt-backup validate \
   --input /tmp/adt-backup-smoke/service_binding_backup.yaml
 ```
 
+An `--objects` backup is a flat list, not a tree, so it is compared with
+`diff` rather than planned:
+
 ```bash
-adt-backup verify \
+adt-backup diff \
   --input /tmp/adt-backup-smoke/service_binding_backup.yaml \
+  --all \
   --destination <DESTINATION> -vv
 ```
 
 Expected:
-- all three commands exit with code `0`
+- the binding is backed up, validated and reported without differences
 
-## 5) Restore: upsert dry smoke
+## 5) Restore: from the verified plan
 
 Use a safe target package/object set that is allowed for update.
 
 ```bash
 adt-backup restore \
-  --input /tmp/adt-backup-smoke/package_backup.yaml \
-  --mode upsert \
-  --destination <DESTINATION> \
-  --force -vv
-```
-
-Expected:
-- restore passes without runtime errors
-
-## 6) Post-restore verification
-
-```bash
-adt-backup verify \
-  --input /tmp/adt-backup-smoke/package_backup.yaml \
+  --plan /tmp/adt-backup-smoke/package_plan.yaml \
   --destination <DESTINATION> -vv
 ```
 
 Expected:
-- no regressions compared to step 3
+- restore passes without runtime errors
+- every group logs `all objects activated successfully` and the run ends with
+  `[FINAL] All objects are active.` — a `remain inactive` list is a failure,
+  whatever the last line says
+
+## 6) Post-restore verification
+
+`restore` ends with its own post-restore check. To repeat it:
+
+```bash
+adt-backup verify \
+  --plan /tmp/adt-backup-smoke/package_plan.yaml \
+  --destination <DESTINATION> -vv
+```
+
+Expected:
+- every object `ok`
 
 ## 7) Optional diff check
 
@@ -110,7 +130,7 @@ adt-backup diff \
 ```
 
 Expected:
-- output matches expected local/system differences
+- no unexpected differences
 
 ## 8) AMDP / scalar functions / table functions / append structure
 
@@ -139,3 +159,7 @@ Expected:
 ## 9) Message class (MSAG)
 
 - [ ] Message class (`MSAG`): backup a class with >=2 messages; restore into a scratch package; `verify` reports OK; edit one message text in the target, re-run `verify` → `source-mismatch`; re-`restore` → OK; add a stray message in the target, re-`restore` → stray removed (reconcile).
+- [ ] Restore into a fresh package: each object logs create → lock → write → unlock at `-vvv`; a refused step reports SAP's message (not an axios status string); no object is left locked after a failed write.
+- [ ] Group activation: `-vvv` shows the activation run polled until `finished`; a syntax error in one object is reported with SAP's `[E]` message and the object is listed as remaining inactive.
+- [ ] Documents: a domain with fixed values, a data element with labels and a table type restore with their full definition (the backed-up XML is written whole).
+- [ ] Function group: its function modules and includes appear as children in the backup and are restored.

@@ -3,8 +3,10 @@ import { readMetadataXmlForType } from '../backup/readMetadataXmlForType';
 import { readSourceText } from '../backup/readSourceText';
 import { decodeBase64 } from '../crypto/decodeBase64';
 import { canonicalizeMessageClass } from '../messageClass/canonicalizeMessageClass';
+import { readMessageClass } from '../messageClass/readMessageClass';
 import type { ParsedMessageClass } from '../messageClass/types';
 import type { ObjectSpec } from '../types';
+import { canonicalDocument } from '../xml/canonicalDocument';
 import { extractMetadata } from '../xml/extractMetadata';
 import type { VerifyEntry } from './types';
 
@@ -27,11 +29,10 @@ export async function verifyObjectInSystem(
 
   try {
     if (spec.type === 'messageClass') {
-      const state = await client.getMessageClass().read({ name: spec.name });
-      if (!state?.messageClass) {
+      const system = await readMessageClass(client, spec.name);
+      if (!system) {
         return { ...base, status: 'missing' };
       }
-      const system = state.messageClass as ParsedMessageClass;
       if (system.packageName) {
         base.actualPackage = system.packageName;
       }
@@ -98,6 +99,24 @@ export async function verifyObjectInSystem(
 
       // If we don't need source check, we're done
       if (!expectedSource && !expectedSourceBase64) {
+        return base;
+      }
+
+      // A document-backed object (domain, data element, table type, …) is
+      // compared by its definition; its package alone says nothing about the
+      // row type, keys or value table a restore would write back.
+      if (expectedFormat === 'xml' || spec.type === 'tableType') {
+        const expectedXml =
+          expectedSourceBase64 !== undefined
+            ? decodeBase64(expectedSourceBase64)
+            : (expectedSource as string);
+        if (canonicalDocument(expectedXml) !== canonicalDocument(metadataXml)) {
+          return {
+            ...base,
+            status: 'source-mismatch',
+            message: 'Definition differs from backup',
+          };
+        }
         return base;
       }
     }

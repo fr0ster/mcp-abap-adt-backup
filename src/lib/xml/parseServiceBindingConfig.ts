@@ -1,4 +1,4 @@
-import type { IServiceBindingConfig } from '@mcp-abap-adt/adt-clients';
+import type { IServiceBindingConfig } from '@mcp-abap-adt/interfaces-adt';
 import { xmlParser } from '../constants/xmlParser';
 import type { NodeValue } from '../types';
 import { findAttribute } from './findAttribute';
