@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Deleting a package that held a published service binding refused
+  everything.** A package walk also lists what the system generated for the
+  binding — `G4BA`, `SCO2`, `SUSH` — and those have no ADT address: the
+  deletion check answered "No URI-Mapping defined for URI" inside its `200`,
+  and the whole group was refused, so nothing was deleted. Restore's deletion
+  (`deleteBackupObjects`) and `scripts/delete-package.ts` now take only what
+  this tool restores; the generated objects go with their binding. Measured on
+  a cloud system: with them the check refused the group; without them the 26
+  objects of a test package were checked and deleted, and the generated ones
+  were gone with the binding. The script also builds its references through
+  `objectReference`, as restore does.
+
 ## [3.0.0] - 2026-09-27
 
 Moves to `@mcp-abap-adt/adt-clients` 23, which makes one request per call and
