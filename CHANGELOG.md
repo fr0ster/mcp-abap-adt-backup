@@ -30,6 +30,9 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
 - The behavior-definition name was never read from a behavior implementation's source (double-escaped regex); a behavior implementation could not be created from a backup whose config lacked it.
+- **Group activation left whole groups inactive when they held a function include or module.** The activation reference carried no function group, adt-clients refuses such a reference before sending anything, and the run for the whole group never started. Activation now builds its references the way deletion already did (`objectReference`): a `FUGR/I` or `FUGR/FF` carries its group as `parentName`. Measured on a cloud trial package of 26 objects: 19 stayed inactive before, 3 after (the three the system itself cannot activate).
+- **`--env <file>` ignored the file.** The CLI took the path only from `--env-path` and treated `--env` as a flag, so the documented form looked for `SAP_URL` in the process environment and stopped with "Missing connection config for destination env". `--env <file>` now reads the file; a bare `--env` still reads the environment.
+- **`extract` read only package backups.** An `--objects` backup (schema 1) holds a flat list with the source as is, and `extract` looked for a tree in it and crashed on `undefined`. It now reads both.
 
 ### Removed
 
@@ -38,6 +41,7 @@ All notable changes to this project will be documented in this file.
 
 ### Tests
 
+- `scripts/integration-test.mjs` follows the current CLI: `backup` → `validate` → `plan` → `verify --plan` → `restore --plan`. It called `list` (removed in February), `verify --input`/`--strict` and `restore --input`/`--force`, none of which exist any more. `tests.verify.strict` and `tests.restore.force` are gone from the template.
 - `npm run test:offline` runs `tests/offline/messageclass.cjs` and the new `tests/offline/sequences.cjs`; the fakes answer `IAdtResponse` as adt-clients 23 does.
 
 ## [2.0.0] - 2026-09-03

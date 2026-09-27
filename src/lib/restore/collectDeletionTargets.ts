@@ -1,5 +1,6 @@
 import type { IObjectReference } from '@mcp-abap-adt/interfaces-adt';
 import type { BackupTreeNode } from '../types';
+import { objectReference } from './objectReference';
 
 /**
  * Every non-package object in the tree, once, as a reference group deletion
@@ -17,16 +18,13 @@ export function collectDeletionTargets(
       const key = `${node.adtType}:${node.name}`;
       if (!seen.has(key)) {
         seen.add(key);
-        const target: IObjectReference = {
-          name: node.name,
-          type: node.adtType,
-        };
-        if (node.functionGroupName && node.adtType.startsWith('FUGR/')) {
-          if (node.adtType !== 'FUGR/F') {
-            target.parentName = node.functionGroupName;
-          }
-        }
-        targets.push(target);
+        targets.push(
+          objectReference({
+            name: node.name,
+            adtType: node.adtType,
+            functionGroupName: node.functionGroupName,
+          }),
+        );
       }
     }
     if (node.children && node.children.length > 0) {

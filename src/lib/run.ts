@@ -41,6 +41,7 @@ import type { ParsedMessageClass } from './messageClass/types';
 import { activateGroup, findInactive } from './restore/activateGroup';
 import { analyzeDependencyLevels } from './restore/analyzeDependencies';
 import { isActivatable } from './restore/isActivatable';
+import { objectReference } from './restore/objectReference';
 import { restoreTreeBackup } from './restore/restoreTreeBackup';
 import { verbosityState } from './state/verbosity';
 import { buildPackageBackupTree } from './tree/buildPackageBackupTree';
@@ -103,8 +104,15 @@ export async function run(): Promise<void> {
 
   const isMcp = Boolean(args.mcp);
   const isEnv = Boolean(args.env);
+  // `--env <file>` is the documented form and `--env-path` its alias; a bare
+  // `--env` reads the process environment. Reading only `--env-path` dropped
+  // the file named by `--env` and looked for SAP_URL in the environment.
   const envPathArg =
-    typeof args['env-path'] === 'string' ? args['env-path'] : undefined;
+    typeof args['env-path'] === 'string'
+      ? args['env-path']
+      : typeof args.env === 'string'
+        ? args.env
+        : undefined;
 
   let destination: string | undefined;
   let envPath: string | undefined;
@@ -539,7 +547,7 @@ async function dispatch(
         if (action.type === 'package' || !action.adtType) continue;
         if (filter !== 'all' && action.action !== filter) continue;
         if (filter === 'all' && action.action === 'create') continue;
-        planRefs.push({ name: action.name, type: action.adtType });
+        planRefs.push(objectReference({ ...action, adtType: action.adtType }));
       }
     }
 
@@ -582,7 +590,9 @@ async function dispatch(
           continue;
         const key = `${action.adtType}:${action.name}`.toUpperCase();
         if (inactiveSet.has(key)) {
-          groupRefs.push({ name: action.name, type: action.adtType });
+          groupRefs.push(
+            objectReference({ ...action, adtType: action.adtType }),
+          );
         }
       }
 
@@ -746,11 +756,29 @@ async function dispatch(
       typeof output !== 'string'
     )
       throw new Error('Missing args');
-    const parsed = YAML.parse(fs.readFileSync(input, 'utf8')) as BackupTreeFile;
+    const parsed = YAML.parse(fs.readFileSync(input, 'utf8')) as
+      | BackupFile
+      | BackupTreeFile;
     const spec = parseObjectSpec(objectSpec);
-    const node = findNodeInTree(parsed.root, spec);
-    if (!node || !node.codeBase64) throw new Error('Not found');
-    fs.writeFileSync(output, decodeBase64(node.codeBase64), 'utf8');
+    // A package backup is a tree (schema 2) holding base64 code; an
+    // `--objects` backup is a flat list (schema 1) holding the source as is.
+    let code: string | undefined;
+    if (parsed.schemaVersion === 2) {
+      const node = findNodeInTree(parsed.root, spec);
+      code = node?.codeBase64 ? decodeBase64(node.codeBase64) : undefined;
+    } else {
+      const object = parsed.objects.find(
+        (o) =>
+          o.type === spec.type &&
+          o.name.toUpperCase() === spec.name.toUpperCase() &&
+          (!spec.functionGroupName ||
+            o.functionGroupName?.toUpperCase() ===
+              spec.functionGroupName.toUpperCase()),
+      );
+      code = object?.source;
+    }
+    if (code === undefined) throw new Error('Not found');
+    fs.writeFileSync(output, code, 'utf8');
     console.log(`Extracted to ${output}`);
     return;
   }

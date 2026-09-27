@@ -55,12 +55,8 @@ tests:
   restore:
     # Enable restore test
     enabled: false
-    # Optional: force restore (use --force)
-    force: false
 
   # Group 3: Verify tests
   verify:
     # Enable verify test
     enabled: false
-    # Optional: strict verify (use --strict)
-    strict: false

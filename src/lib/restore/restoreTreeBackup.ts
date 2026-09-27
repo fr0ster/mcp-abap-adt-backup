@@ -13,6 +13,7 @@ import type {
 import { activateGroup, findInactive } from './activateGroup';
 import { analyzeDependencies } from './analyzeDependencies';
 import { isActivatable } from './isActivatable';
+import { objectReference } from './objectReference';
 import { writeObject } from './writeObject';
 
 /**
@@ -218,7 +219,11 @@ export async function restoreTreeBackup(
         transportLayer,
       });
       if (shouldActivate && node.adtType && isActivatable(node.type)) {
-        return { name: node.name, type: node.adtType };
+        return objectReference({
+          name: node.name,
+          adtType: node.adtType,
+          functionGroupName: node.functionGroupName,
+        });
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
