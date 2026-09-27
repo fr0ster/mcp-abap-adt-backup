@@ -68,8 +68,21 @@ import { formatVerifyResultsText } from './verify/formatVerifyResultsText';
 import { verifyBackup } from './verify/verifyBackup';
 import { canonicalDocument } from './xml/canonicalDocument';
 
+/** The version of the installed package, read from its own package.json. */
+function packageVersion(): string {
+  const manifest = path.resolve(__dirname, '../../package.json');
+  return (JSON.parse(fs.readFileSync(manifest, 'utf8')) as { version: string })
+    .version;
+}
+
 export async function run(): Promise<void> {
   const argv = process.argv.slice(2);
+  // Before anything reads options or connects: the version answers alone.
+  // Not `-v`: that is a verbosity level here.
+  if (argv[0] === 'version' || argv[0] === '--version') {
+    console.log(packageVersion());
+    process.exit(0);
+  }
   const args = parseArgs(argv.slice(1));
   verbosityState.level =
     typeof args.verbosity === 'number' ? args.verbosity : getVerbosity(argv);
