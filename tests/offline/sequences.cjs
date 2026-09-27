@@ -346,5 +346,38 @@ function nodeStructure(nodes, types = []) {
   if (saved === undefined) delete process.env.SAP_SYSTEM_TYPE;
   else process.env.SAP_SYSTEM_TYPE = saved;
 
+  // --- a service binding: activated before it is published, published under its lock ---
+  const bindingNode = {
+    type: 'serviceBinding', name: 'ZSB_X', restoreStatus: 'ok',
+    config: {
+      bindingName: 'ZSB_X', packageName: 'ZPKG', description: 'X',
+      serviceDefinitionName: 'ZSD_X', serviceName: 'ZSD_X', serviceVersion: '0001',
+      bindingVariant: 'ODATA_V4_WEB_API', desiredPublicationState: 'published', serviceType: 'odatav4',
+    },
+  };
+  log = [];
+  await writeObject(targetWith('getServiceBinding', fakeHandler(log)), bindingNode, { mode: 'create', activate: true });
+  const bindingSteps = log.map((s) => s.name);
+  assert.deepStrictEqual(
+    bindingSteps.slice(0, 5),
+    ['create', 'activate', 'lock', 'update', 'unlock'],
+    'a new binding is activated before it is published, and published under its lock',
+  );
+  const publishOptions = log[3].args[1];
+  assert.ok(publishOptions.timeout >= 10 * 60 * 1000, 'the publication gets a long timeout');
+  assert.strictEqual(log[4].args[1], 'HANDLE', 'the publication lock is released');
+
+  log = [];
+  await assert.rejects(
+    writeObject(
+      targetWith('getServiceBinding', fakeHandler(log, { update: async () => fail(200, 'Local Publish of ZSB_X failed') })),
+      { ...bindingNode },
+      { mode: 'update', activate: false },
+    ),
+    /publish serviceBinding ZSB_X/,
+    'a refused publication is a failure',
+  );
+  assert.deepStrictEqual(log.map((s) => s.name), ['lock', 'update', 'unlock'], 'the lock is released after a refused publication');
+
   console.log('OK sequences');
 })().catch((e) => { console.error(e); process.exit(1); });

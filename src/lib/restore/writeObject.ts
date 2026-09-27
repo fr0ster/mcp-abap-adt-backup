@@ -777,17 +777,49 @@ async function writeServiceBinding(
   if (!desired || !serviceType) return;
   if (context.create && desired === 'unpublished') return;
 
-  const answer = await binding.update(
-    { bindingName: name, desiredPublicationState: desired, serviceType },
-    { analyse: analysePublication },
-  );
-  if (!answer.ok) {
-    throw new AdtCallError(
-      `${desired === 'published' ? 'publish' : 'unpublish'} serviceBinding ${name}`,
-      answer.getError(),
+  // A binding just created has no active version, and publishing it answers
+  // "Service Binding … does not exist" inside a 200. It is activated first;
+  // the service's information read (`generateServiceBinding`, a GET) is not
+  // what is missing — measured: after the GET the publish still fails, after
+  // the activation it succeeds.
+  if (context.create) {
+    requireOk(
+      await binding.activate(
+        { bindingName: name },
+        { analyse: analyseActivation },
+      ),
+      `activate serviceBinding ${name}`,
     );
   }
+
+  // The publication runs under the binding's lock, as Eclipse runs it; the
+  // lock is released whatever the job answered.
+  const handle = requireOk(
+    await binding.lock({ bindingName: name }, refused),
+    `lock serviceBinding ${name}`,
+  );
+  try {
+    const answer = await binding.update(
+      { bindingName: name, desiredPublicationState: desired, serviceType },
+      { analyse: analysePublication, timeout: PUBLICATION_TIMEOUT_MS },
+    );
+    if (!answer.ok) {
+      throw new AdtCallError(
+        `${desired === 'published' ? 'publish' : 'unpublish'} serviceBinding ${name}`,
+        answer.getError(),
+      );
+    }
+  } finally {
+    await binding.unlock({ bindingName: name }, handle as string, refused);
+  }
 }
+
+/**
+ * How long a publication job may take. Measured at 133 s on an idle system
+ * and minutes on a loaded one; the library's 120 s default ends the request
+ * before the job answers. The wait is on the job's own answer — nothing polls.
+ */
+const PUBLICATION_TIMEOUT_MS = 15 * 60 * 1000;
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

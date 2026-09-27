@@ -493,7 +493,7 @@ export async function dispatch(
         : undefined;
 
     if (!target) throw new Error('Client required');
-    await restoreTreeBackup(
+    const outcome = await restoreTreeBackup(
       target,
       backup.root,
       'upsert',
@@ -523,6 +523,14 @@ export async function dispatch(
         verbosityState.level,
       ),
     );
+    // A restore that left failures or inactive objects did not restore, and
+    // its exit status says so — a script cannot read the log.
+    if (outcome.failed > 0 || outcome.inactive > 0) {
+      console.log(
+        `Restore incomplete: ${outcome.failed} failed, ${outcome.inactive} inactive.`,
+      );
+      process.exitCode = 1;
+    }
     return;
   }
 

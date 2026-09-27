@@ -92,6 +92,16 @@ const RESTORE_PHASES: RestorePhase[] = [
   { name: 'Enhancements', types: ['enhancement'], activation: 'individual' },
 ];
 
+/**
+ * What a restore left behind: the objects that failed, and the objects it
+ * processed that are still inactive. Both are failures of the restore — the
+ * summary line alone used to say "successfully" over either.
+ */
+export interface RestoreOutcome {
+  failed: number;
+  inactive: number;
+}
+
 export async function restoreTreeBackup(
   target: RestoreTarget,
   root: BackupTreeNode,
@@ -104,7 +114,7 @@ export async function restoreTreeBackup(
   softwareComponent?: string,
   superPackageOverride?: string,
   transportLayer?: string,
-): Promise<void> {
+): Promise<RestoreOutcome> {
   const { client } = target;
   const allNodes = flattenTree(root).filter(
     (node) => node.type && node.restoreStatus === 'ok',
@@ -416,7 +426,10 @@ export async function restoreTreeBackup(
     }
   }
 
-  // Final check: find remaining inactive objects and activate them
+  // Final check: find remaining inactive objects and activate them. Only the
+  // objects that were processed are checked — a failed one is in `failures`,
+  // so "all active" below never speaks for it.
+  let inactiveLeft = 0;
   if (allProcessedRefs.length > 0) {
     const stillInactive = await findInactiveRefs(allProcessedRefs);
     if (stillInactive.length > 0) {
@@ -431,16 +444,27 @@ export async function restoreTreeBackup(
 
       // Verify final state
       const remaining = await findInactiveRefs(allProcessedRefs);
+      inactiveLeft = remaining.length;
       if (remaining.length > 0) {
         logVerbose(1, `  [!] ${remaining.length} object(s) remain inactive:`);
         for (const ref of remaining) {
           logVerbose(1, `      - ${ref.type}:${ref.name}`);
         }
       } else {
-        logVerbose(1, '[FINAL] All objects activated successfully.');
+        logVerbose(
+          1,
+          failures.length > 0
+            ? '[FINAL] All processed objects activated; the failed ones below were not processed.'
+            : '[FINAL] All objects activated successfully.',
+        );
       }
     } else {
-      logVerbose(1, '[FINAL] All objects are active.');
+      logVerbose(
+        1,
+        failures.length > 0
+          ? '[FINAL] All processed objects are active; the failed ones below were not processed.'
+          : '[FINAL] All objects are active.',
+      );
     }
   }
 
@@ -452,7 +476,13 @@ export async function restoreTreeBackup(
     for (const f of failures) {
       logVerbose(1, `  - ${f.node.type}:${f.node.name}: ${f.error}`);
     }
+  } else if (inactiveLeft > 0) {
+    logVerbose(
+      1,
+      `\n>>> RESTORE COMPLETED WITH ${inactiveLeft} OBJECT(S) INACTIVE.`,
+    );
   } else {
     logVerbose(1, '\n>>> RESTORE COMPLETED SUCCESSFULLY.');
   }
+  return { failed: failures.length, inactive: inactiveLeft };
 }
