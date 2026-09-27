@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [3.0.3] - 2026-09-27
+
+### Added
+
+- **`adt-backup version`** (also `--version`) prints the installed version,
+  read from the package's own `package.json`, and exits before anything
+  connects. There was no way to ask; both answered "Unknown command". Not `-v`,
+  which is a verbosity level.
+
+### Fixed
+
+- The command list in `--help` named `list`, removed in 2.x, and left out
+  `extract` and `patch`. It now lists what the CLI runs.
+
 ## [3.0.2] - 2026-09-27
 
 ### Changed
