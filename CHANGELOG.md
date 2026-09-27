@@ -39,6 +39,10 @@ All notable changes to this project will be documented in this file.
 - The flat (`schemaVersion 1`) restore path (`restoreObject`, `restoreObjects`, `sortByDependencies`), which no command used. `backup --objects` still writes such backups for `diff`/`check`.
 - Debug scripts built on removed library calls: `scripts/test-hierarchy.ts`, `debug-where-used-list.ts` (and the `debug:deps` npm script), `dump-adt-xml.js`, `debug-nodestructure.ts`, `test-obj-structure.ts`, `test-virtual-folders.ts`. `scripts/delete-package.ts` is rewritten on the new calls and takes the system type as its fourth argument.
 
+### Documentation
+
+- `README.md` and `docs/SMOKE_CHECKLIST.md` showed `verify --input` and `restore --input --mode upsert --force`, which the CLI no longer takes. They now show `plan` → `verify --plan` → `restore --plan`, give every online command its `--system-type`, and compare an `--objects` backup with `diff`, since only a package backup can be planned.
+
 ### Tests
 
 - `scripts/integration-test.mjs` follows the current CLI: `backup` → `validate` → `plan` → `verify --plan` → `restore --plan`. It called `list` (removed in February), `verify --input`/`--strict` and `restore --input`/`--force`, none of which exist any more. `tests.verify.strict` and `tests.restore.force` are gone from the template.

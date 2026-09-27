@@ -44,18 +44,27 @@ adt-backup validate \
 Expected:
 - `Backup validated`
 
-## 3) Verify: compare with system
+## 3) Plan and verify: compare with system
+
+A restore runs from a plan. `plan` is offline and reads the backup; `verify`
+reads the target system and marks each action `create`, `update` or `skip`.
+Only a package backup (a tree) can be planned.
 
 ```bash
-adt-backup verify \
+adt-backup plan \
   --input /tmp/adt-backup-smoke/package_backup.yaml \
+  --output /tmp/adt-backup-smoke/package_plan.yaml
+
+adt-backup verify \
+  --plan /tmp/adt-backup-smoke/package_plan.yaml \
   --destination <DESTINATION> -vv
 ```
 
 Expected:
-- no unexpected `missing` / `type-mismatch` entries
+- a summary line `Summary (pre-restore): Total: …`; on the system the backup
+  came from, every object is `ok` and planned as `update`
 
-## 4) Service Binding: focused backup/validate/verify
+## 4) Service Binding: focused backup/validate/diff
 
 ```bash
 adt-backup backup \
@@ -69,40 +78,47 @@ adt-backup validate \
   --input /tmp/adt-backup-smoke/service_binding_backup.yaml
 ```
 
+An `--objects` backup is a flat list, not a tree, so it is compared with
+`diff` rather than planned:
+
 ```bash
-adt-backup verify \
+adt-backup diff \
   --input /tmp/adt-backup-smoke/service_binding_backup.yaml \
+  --all \
   --destination <DESTINATION> -vv
 ```
 
 Expected:
-- all three commands exit with code `0`
+- the binding is backed up, validated and reported without differences
 
-## 5) Restore: upsert dry smoke
+## 5) Restore: from the verified plan
 
 Use a safe target package/object set that is allowed for update.
 
 ```bash
 adt-backup restore \
-  --input /tmp/adt-backup-smoke/package_backup.yaml \
-  --mode upsert \
-  --destination <DESTINATION> \
-  --force -vv
-```
-
-Expected:
-- restore passes without runtime errors
-
-## 6) Post-restore verification
-
-```bash
-adt-backup verify \
-  --input /tmp/adt-backup-smoke/package_backup.yaml \
+  --plan /tmp/adt-backup-smoke/package_plan.yaml \
   --destination <DESTINATION> -vv
 ```
 
 Expected:
-- no regressions compared to step 3
+- restore passes without runtime errors
+- every group logs `all objects activated successfully` and the run ends with
+  `[FINAL] All objects are active.` — a `remain inactive` list is a failure,
+  whatever the last line says
+
+## 6) Post-restore verification
+
+`restore` ends with its own post-restore check. To repeat it:
+
+```bash
+adt-backup verify \
+  --plan /tmp/adt-backup-smoke/package_plan.yaml \
+  --destination <DESTINATION> -vv
+```
+
+Expected:
+- every object `ok`
 
 ## 7) Optional diff check
 
@@ -114,7 +130,7 @@ adt-backup diff \
 ```
 
 Expected:
-- output matches expected local/system differences
+- no unexpected differences
 
 ## 8) AMDP / scalar functions / table functions / append structure
 

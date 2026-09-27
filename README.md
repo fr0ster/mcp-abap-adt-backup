@@ -34,22 +34,23 @@ Options:
 # Package backup (recursive)
 adt-backup backup --package ZPKG_TEST --output backup.yaml --destination TRIAL --system-type cloud
 
-# Verify (source-only by default)
-adt-backup verify --input backup.yaml --destination TRIAL
+# Plan (offline), then verify it against the target: marks each object create / update / skip
+adt-backup plan --input backup.yaml --output plan.yaml
+adt-backup verify --plan plan.yaml --destination TRIAL --system-type cloud
 
 # Diff (all objects, or a single --object)
-adt-backup diff --input backup.yaml --all --destination TRIAL
+adt-backup diff --input backup.yaml --all --destination TRIAL --system-type cloud
 
-# Restore (new objects and updates activate by default)
-adt-backup restore --input backup.yaml --mode upsert --destination TRIAL
-Use `--no-activate-on-create` or `--no-activate-on-update` to skip activation for the respective phases.
+# Restore from the verified plan (new objects and updates activate by default)
+adt-backup restore --plan plan.yaml --destination TRIAL --system-type cloud
+# --no-activate skips every activation; --transport <request> records the changes
 
 # Extract / patch a single object payload
 adt-backup extract --input backup.yaml --object class:ZCL_TEST --out ZCL_TEST.abap
 adt-backup patch --input backup.yaml --object class:ZCL_TEST --file ZCL_TEST.abap
 
 # Single object backup (Service Binding)
-adt-backup backup --objects serviceBinding:Z_UI_SERVICE --output srvb_backup.yaml --destination TRIAL
+adt-backup backup --objects serviceBinding:Z_UI_SERVICE --output srvb_backup.yaml --destination TRIAL --system-type cloud
 ```
 
 ## Help
